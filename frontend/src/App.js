@@ -190,6 +190,8 @@ export default function App() {
           <div className="search">
             <button onClick={async () => {
               setLoading(true);
+              setError("");
+              setPortfolio(null);
               try {
                 const payload = {
                   holdings: holdings.map(h => ({
