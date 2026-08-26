@@ -11,6 +11,7 @@ from finance import (
 )
 
 import os
+import json
 from dotenv import load_dotenv
 from google import genai
 from itertools import combinations
@@ -39,6 +40,35 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# =========================================================
+# TICKER DIRECTORY (for search / autocomplete)
+# =========================================================
+# Loaded once at startup from tickers.json, which is built
+# offline by build_ticker_list.py from NASDAQ Trader's
+# official symbol directory files. Kept in memory so /search
+# never has to call yfinance or hit the network.
+
+TICKERS_PATH = os.path.join(
+    os.path.dirname(__file__), "tickers.json"
+)
+
+try:
+    with open(TICKERS_PATH, "r") as f:
+        TICKER_DIRECTORY = json.load(f)
+
+except Exception as e:
+    print(
+        f"Could not load ticker directory: {e}"
+    )
+    TICKER_DIRECTORY = []
+
+# Precompute lowercase fields once so /search never
+# re-lowercases the whole list on every request.
+for _entry in TICKER_DIRECTORY:
+    _entry["_symbol_lower"] = _entry["symbol"].lower()
+    _entry["_name_lower"] = _entry["name"].lower()
 
 
 # =========================================================
@@ -166,6 +196,54 @@ def root():
     return {
         "message": "PortfolioOS backend is live"
     }
+
+
+# =========================================================
+# TICKER SEARCH
+# =========================================================
+
+@app.get("/search")
+def search_tickers(q: str, limit: int = 10):
+    query = q.strip().lower()
+
+    if not query:
+        return {"results": []}
+
+    limit = max(1, min(limit, 25))
+
+    symbol_matches = []
+    name_matches = []
+
+    for entry in TICKER_DIRECTORY:
+        if len(symbol_matches) >= limit:
+            break
+
+        if entry["_symbol_lower"] == query:
+            symbol_matches.insert(0, entry)
+        elif entry["_symbol_lower"].startswith(query):
+            symbol_matches.append(entry)
+        elif (
+            len(symbol_matches) + len(name_matches)
+            < limit
+            and query in entry["_name_lower"]
+        ):
+            name_matches.append(entry)
+
+    symbol_matches.sort(key=lambda e: e["symbol"])
+
+    combined = (symbol_matches + name_matches)[:limit]
+
+    results = [
+        {
+            "symbol": entry["symbol"],
+            "name": entry["name"],
+            "exchange": entry["exchange"],
+            "etf": entry["etf"],
+        }
+        for entry in combined
+    ]
+
+    return {"results": results}
 
 
 # =========================================================

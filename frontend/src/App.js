@@ -1,5 +1,6 @@
 import { useState } from "react";
 import axios from "axios";
+import TickerAutocomplete from "./TickerAutocomplete";
 import {
   LineChart,
   Line,
@@ -521,27 +522,17 @@ export default function App() {
                     <SearchIcon />
                   </span>
 
-                  <input
-                    id="stock-search"
-                    type="text"
+                  <TickerAutocomplete
+                    inputId="stock-search"
                     value={ticker}
-                    onChange={(event) =>
-                      setTicker(
-                        event.target.value
-                      )
-                    }
-                    onKeyDown={(event) => {
-                      if (
-                        event.key === "Enter" &&
-                        !loading
-                      ) {
-                        analyze();
-                      }
+                    onChange={setTicker}
+                    onSelect={(suggestion) => {
+                      setTicker(suggestion.symbol);
+                    }}
+                    onEnter={() => {
+                      if (!loading) analyze();
                     }}
                     placeholder="AAPL, MSFT, TCS.NS, RELIANCE.NS"
-                    autoComplete="off"
-                    autoCapitalize="characters"
-                    spellCheck="false"
                   />
                 </div>
 
@@ -1103,22 +1094,24 @@ export default function App() {
                           TICKER
                         </span>
 
-                        <input
-                          type="text"
-                          placeholder="e.g. TCS.NS"
-                          value={
-                            holding.ticker
-                          }
-                          onChange={(event) =>
+                        <TickerAutocomplete
+                          inputId={`holding-ticker-${index}`}
+                          value={holding.ticker}
+                          onChange={(newValue) =>
                             updateHolding(
                               index,
                               "ticker",
-                              event.target.value
+                              newValue
                             )
                           }
-                          autoCapitalize="characters"
-                          autoComplete="off"
-                          spellCheck="false"
+                          onSelect={(suggestion) =>
+                            updateHolding(
+                              index,
+                              "ticker",
+                              suggestion.symbol
+                            )
+                          }
+                          placeholder="e.g. TCS.NS"
                         />
                       </div>
 

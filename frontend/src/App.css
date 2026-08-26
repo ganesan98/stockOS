@@ -485,6 +485,131 @@ input:focus-visible {
   color: #4f5a63;
 }
 
+/* =========================================================
+   TICKER AUTOCOMPLETE
+   ========================================================= */
+
+.ticker-autocomplete {
+  position: relative;
+
+  width: 100%;
+  min-width: 0;
+}
+
+.ticker-suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+
+  max-height: 280px;
+  overflow-y: auto;
+
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+
+  background: var(--panel-2);
+
+  box-shadow: var(--shadow);
+
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+}
+
+.ticker-suggestion-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+
+  padding: 9px 10px;
+
+  border-radius: calc(var(--radius) - 4px);
+
+  cursor: pointer;
+
+  transition: background 0.12s ease;
+}
+
+.ticker-suggestion-row.highlighted,
+.ticker-suggestion-row:hover {
+  background: var(--panel-3);
+}
+
+.ticker-suggestion-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+
+  min-width: 0;
+}
+
+.ticker-suggestion-symbol {
+  flex-shrink: 0;
+
+  color: var(--text);
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.ticker-suggestion-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  color: var(--muted);
+
+  font-size: 0.66rem;
+}
+
+.ticker-suggestion-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  flex-shrink: 0;
+}
+
+.ticker-tag {
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+
+  padding: 2px 6px;
+
+  color: var(--muted);
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: 0.58rem;
+  letter-spacing: 0.03em;
+}
+
+.ticker-tag-etf {
+  border-color: rgba(231, 200, 90, 0.35);
+  color: var(--yellow);
+}
+
+.ticker-suggestions-empty {
+  padding: 12px 14px;
+
+  color: var(--muted-dark);
+
+  font-size: 0.65rem;
+}
+
 .action-button {
   height: 48px;
 
