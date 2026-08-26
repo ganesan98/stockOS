@@ -634,34 +634,44 @@ Given this data for {risk_data['name']} ({ticker}):
 - Current Price: {risk_data['price']}
 - Daily Volatility: {risk_data['volatility']}%
 - Sharpe Ratio: {risk_data['sharpe_ratio']}
-- Historical VaR 95%: {risk_data['var_95']}%
+- Historical VaR 95% (DAILY): {risk_data['var_95']}%
 - Monte Carlo Expected Price (1yr):
   {risk_data['mc']['expected_price']}
-- Monte Carlo Worst Case:
+- Monte Carlo Worst Case (1yr):
   {risk_data['mc']['worst_case']}
-- Monte Carlo Best Case:
+- Monte Carlo Best Case (1yr):
   {risk_data['mc']['best_case']}
 
 Write exactly 3 concise sentences in plain English.
 
 Sentence 1:
-Describe the stock's overall risk profile using the volatility
+Describe the stock's overall risk profile using the daily volatility
 and Sharpe ratio.
 
 Sentence 2:
-Explain the potential downside using VaR and the Monte Carlo
-worst-case scenario.
+Explain the downside using the DAILY 95% VaR and the 1-year Monte
+Carlo worst-case price.
 
 Sentence 3:
-Explain the expected and upside scenario using the Monte Carlo
-expected and best-case prices.
+Explain the 1-year Monte Carlo expected price and best-case price.
 
-Be direct and specific with the numbers.
-Explain what the risk means for an actual investor.
-Avoid financial jargon.
-Do not make up information.
-Do not provide a generic disclaimer.
-Do not say you are an AI.
+IMPORTANT ACCURACY RULES:
+
+- VaR 95% above is a DAILY, one-day risk estimate.
+- Never describe daily VaR as monthly, yearly, weekly, or any other
+  time period.
+- Do not invent or imply a probability for the Monte Carlo worst-case,
+  expected-price, or best-case values.
+- Do not say there is a "5% chance" of reaching a Monte Carlo price.
+- The 95% VaR indicates the estimated loss threshold associated with
+  the 5th percentile of DAILY returns; describe it only as one-day risk.
+- Monte Carlo worst-case, expected, and best-case figures are
+  ONE-YEAR simulated price scenarios, not guaranteed outcomes.
+- Use the exact numerical values provided.
+- Do not make up information.
+- Do not provide a generic disclaimer.
+- Do not say you are an AI.
+- Keep the explanation balanced rather than overly bullish or bearish.
 """
 
         response = client.chat.completions.create(
@@ -670,12 +680,10 @@ Do not say you are an AI.
                 {
                     "role": "system",
                     "content": (
-                        "You are a professional financial "
-                        "risk analyst. Analyze only the "
-                        "provided numerical data. "
-                        "Be concise, precise, balanced, "
-                        "and easy for a retail investor "
-                        "to understand."
+                        "You are a professional financial risk analyst. "
+                        "Analyze only the numerical data provided. "
+                        "Return a concise, clear explanation for a retail "
+                        "investor. Do not reveal your reasoning process."
                     ),
                 },
                 {
@@ -683,9 +691,10 @@ Do not say you are an AI.
                     "content": prompt,
                 },
             ],
-            reasoning_effort="medium",
-            temperature=0.2,
-            max_tokens=300,
+            reasoning_effort="low",
+            include_reasoning=False,
+            temperature=0.3,
+            max_completion_tokens=1024,
         )
 
         summary = (
