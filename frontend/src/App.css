@@ -1,5 +1,5 @@
 /* =========================================================
-   PORTFOLIOOS — FINTECH UI
+   PORTFOLIOOS — SENIOR FINTECH UI
    ========================================================= */
 
 * {
@@ -80,7 +80,6 @@ input:focus-visible {
 
 .app {
   min-height: 100vh;
-
   position: relative;
   overflow-x: hidden;
 
@@ -245,7 +244,7 @@ input:focus-visible {
 }
 
 /* =========================================================
-   MAIN NAV
+   NAVIGATION
    ========================================================= */
 
 .main-nav {
@@ -740,10 +739,6 @@ input:focus-visible {
   line-height: 1.55;
 }
 
-.section-heading.compact p {
-  margin-bottom: 0;
-}
-
 .section-note {
   flex: 0 0 auto;
 
@@ -764,7 +759,7 @@ input:focus-visible {
 }
 
 /* =========================================================
-   METRIC GRID
+   METRICS
    ========================================================= */
 
 .metric-grid {
@@ -929,20 +924,11 @@ input:focus-visible {
 }
 
 /* =========================================================
-   CHART PANEL
+   CHART
    ========================================================= */
 
 .chart-panel {
   padding: 19px 20px 11px;
-}
-
-.chart-meta {
-  margin-top: -9px;
-  margin-bottom: 5px;
-
-  color: var(--muted-dark);
-
-  font-size: 0.52rem;
 }
 
 .chart-container {
@@ -950,7 +936,7 @@ input:focus-visible {
 }
 
 /* =========================================================
-   INTERPRETATION
+   RISK INTERPRETATION
    ========================================================= */
 
 .interpretation-panel {
@@ -1381,7 +1367,7 @@ input:focus-visible {
 }
 
 /* =========================================================
-   COMPARISON
+   COMPARISON TABLE
    ========================================================= */
 
 .comparison-panel {
@@ -1534,6 +1520,163 @@ input:focus-visible {
 }
 
 /* =========================================================
+   RISK / RETURN GRAPH
+   ========================================================= */
+
+.risk-return-panel {
+  padding: 18px 20px 0;
+
+  overflow: hidden;
+}
+
+.risk-return-chart {
+  width: 100%;
+  min-height: 380px;
+}
+
+.risk-return-footer {
+  padding: 15px 0 17px;
+
+  border-top: 1px solid var(--line);
+}
+
+.risk-return-hint {
+  display: flex;
+  align-items: center;
+
+  gap: 28px;
+}
+
+.hint-axis {
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+}
+
+.hint-arrow {
+  width: 23px;
+  height: 23px;
+
+  display: grid;
+  place-items: center;
+
+  border: 1px solid var(--line);
+
+  border-radius: 6px;
+
+  color: var(--green);
+
+  font-size: 0.75rem;
+}
+
+.hint-dot {
+  width: 9px;
+  height: 9px;
+
+  display: block;
+
+  border-radius: 50%;
+
+  background: var(--green);
+
+  box-shadow:
+    0 0 0 4px rgba(
+      43,
+      233,
+      140,
+      0.07
+    );
+}
+
+.hint-axis strong {
+  display: block;
+
+  color: var(--text-soft);
+
+  font-size: 0.52rem;
+  font-weight: 600;
+}
+
+.hint-axis span:not(
+  .hint-arrow
+):not(.hint-dot) {
+  display: block;
+
+  margin-top: 2px;
+
+  color: var(--muted-dark);
+
+  font-size: 0.47rem;
+}
+
+/* =========================================================
+   GRAPH TOOLTIP
+   ========================================================= */
+
+.risk-return-tooltip {
+  min-width: 185px;
+
+  padding: 11px 12px;
+
+  border: 1px solid #2a343c;
+
+  border-radius: 8px;
+
+  background: #10151a;
+
+  box-shadow:
+    0 14px 32px rgba(0, 0, 0, 0.35);
+}
+
+.tooltip-title {
+  padding-bottom: 8px;
+
+  margin-bottom: 8px;
+
+  border-bottom: 1px solid var(--line);
+
+  color: var(--green);
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: 0.65rem;
+  font-weight: 650;
+}
+
+.tooltip-grid {
+  display: grid;
+
+  grid-template-columns:
+    1fr auto;
+
+  gap: 6px 14px;
+}
+
+.tooltip-grid span {
+  color: var(--muted);
+
+  font-size: 0.51rem;
+}
+
+.tooltip-grid strong {
+  color: var(--text);
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: 0.51rem;
+  font-weight: 600;
+}
+
+/* =========================================================
    PORTFOLIO DETAILS
    ========================================================= */
 
@@ -1633,7 +1776,12 @@ input:focus-visible {
   margin-bottom: 28px;
   padding: 14px 16px;
 
-  border: 1px solid rgba(43, 233, 140, 0.1);
+  border: 1px solid rgba(
+    43,
+    233,
+    140,
+    0.1
+  );
 
   border-radius: var(--radius);
 
@@ -2014,6 +2162,22 @@ input:focus-visible {
   .comparison-head,
   .comparison-row {
     min-width: 800px;
+  }
+
+  .risk-return-panel {
+    overflow-x: auto;
+  }
+
+  .risk-return-chart {
+    min-width: 650px;
+  }
+
+  .risk-return-hint {
+    align-items: flex-start;
+
+    flex-direction: column;
+
+    gap: 12px;
   }
 
   .footer {

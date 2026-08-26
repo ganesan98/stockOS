@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import yfinance as yf
+
 from finance import (
     get_returns,
     historical_var,
@@ -8,6 +9,7 @@ from finance import (
     sharpe_ratio,
     monte_carlo,
 )
+
 import os
 from dotenv import load_dotenv
 from google import genai
@@ -45,25 +47,28 @@ app.add_middleware(
 
 def normalize_scores(values, higher_is_better=True):
     """
-    Convert a set of values into relative 0-100 scores.
+    Convert values into relative 0-100 scores.
 
-    Used only for comparing holdings within the same portfolio.
+    This score is only meaningful for comparing the
+    holdings entered into the same portfolio.
     """
+
     if not values:
         return []
 
     low = min(values)
     high = max(values)
 
-    # If every holding has the same value,
-    # give them all a neutral score.
     if high == low:
         return [50.0] * len(values)
 
     scores = []
 
     for value in values:
-        score = ((value - low) / (high - low)) * 100
+        score = (
+            (value - low)
+            / (high - low)
+        ) * 100
 
         if not higher_is_better:
             score = 100 - score
@@ -75,10 +80,9 @@ def normalize_scores(values, higher_is_better=True):
 
 def build_stock_comparison(stock_stats):
     """
-    Build a relative risk-adjusted comparison between
-    the holdings in a portfolio.
+    Create a relative risk-adjusted comparison.
 
-    Weights:
+    Score weighting:
         30% -> 1-year return
         40% -> Sharpe ratio
         15% -> volatility
@@ -88,31 +92,45 @@ def build_stock_comparison(stock_stats):
     if not stock_stats:
         return []
 
-    comparison = list(stock_stats.values())
+    comparison = list(
+        stock_stats.values()
+    )
 
     return_scores = normalize_scores(
-        [stock["return_1y"] for stock in comparison],
+        [
+            stock["return_1y"]
+            for stock in comparison
+        ],
         higher_is_better=True,
     )
 
     sharpe_scores = normalize_scores(
-        [stock["sharpe"] for stock in comparison],
+        [
+            stock["sharpe"]
+            for stock in comparison
+        ],
         higher_is_better=True,
     )
 
     volatility_scores = normalize_scores(
-        [stock["volatility"] for stock in comparison],
+        [
+            stock["volatility"]
+            for stock in comparison
+        ],
         higher_is_better=False,
     )
 
-    # VaR values are negative in the current system.
-    # We compare their absolute downside magnitude.
     var_scores = normalize_scores(
-        [abs(stock["var_95"]) for stock in comparison],
+        [
+            abs(stock["var_95"])
+            for stock in comparison
+        ],
         higher_is_better=False,
     )
 
-    for index, stock in enumerate(comparison):
+    for index, stock in enumerate(
+        comparison
+    ):
         score = (
             return_scores[index] * 0.30
             + sharpe_scores[index] * 0.40
@@ -120,14 +138,20 @@ def build_stock_comparison(stock_stats):
             + var_scores[index] * 0.15
         )
 
-        stock["score"] = round(float(score), 1)
+        stock["score"] = round(
+            float(score),
+            1,
+        )
 
     comparison.sort(
         key=lambda stock: stock["score"],
         reverse=True,
     )
 
-    for rank, stock in enumerate(comparison, start=1):
+    for rank, stock in enumerate(
+        comparison,
+        start=1,
+    ):
         stock["rank"] = rank
 
     return comparison
@@ -145,7 +169,7 @@ def root():
 
 
 # =========================================================
-# SINGLE STOCK
+# STOCK INFORMATION
 # =========================================================
 
 @app.get("/stock/{ticker}")
@@ -159,15 +183,20 @@ def get_stock(ticker: str):
 
     except Exception as e:
         print(
-            f"Yahoo Finance info error for {ticker}: {e}"
+            f"Yahoo Finance info error for "
+            f"{ticker}: {e}"
         )
 
-        # Try fast_info as a fallback
         try:
             fast_info = stock.fast_info
 
-            price = fast_info.get("lastPrice")
-            currency = fast_info.get("currency")
+            price = fast_info.get(
+                "lastPrice"
+            )
+
+            currency = fast_info.get(
+                "currency"
+            )
 
             return {
                 "ticker": ticker,
@@ -178,23 +207,31 @@ def get_stock(ticker: str):
 
         except Exception as fallback_error:
             print(
-                "Yahoo Finance fallback error for "
-                f"{ticker}: {fallback_error}"
+                "Yahoo Finance fallback error "
+                f"for {ticker}: "
+                f"{fallback_error}"
             )
 
             raise HTTPException(
                 status_code=503,
                 detail=(
-                    "Yahoo Finance is temporarily unavailable. "
-                    "Please try again."
+                    "Yahoo Finance is temporarily "
+                    "unavailable. Please try again."
                 ),
             )
 
     return {
         "ticker": ticker,
-        "name": info.get("longName") or ticker,
-        "price": info.get("currentPrice"),
-        "currency": info.get("currency"),
+        "name": (
+            info.get("longName")
+            or ticker
+        ),
+        "price": info.get(
+            "currentPrice"
+        ),
+        "currency": info.get(
+            "currency"
+        ),
     }
 
 
@@ -220,13 +257,18 @@ def get_history(
             raise HTTPException(
                 status_code=404,
                 detail=(
-                    f"No historical data found for {ticker}"
+                    f"No historical data found "
+                    f"for {ticker}"
                 ),
             )
 
-        hist = hist[["Close"]].reset_index()
+        hist = hist[
+            ["Close"]
+        ].reset_index()
 
-        hist["Date"] = hist["Date"].astype(str)
+        hist["Date"] = hist[
+            "Date"
+        ].astype(str)
 
         return hist.to_dict(
             orient="records"
@@ -237,15 +279,15 @@ def get_history(
 
     except Exception as e:
         print(
-            "Yahoo Finance history error for "
-            f"{ticker}: {e}"
+            "Yahoo Finance history error "
+            f"for {ticker}: {e}"
         )
 
         raise HTTPException(
             status_code=503,
             detail=(
-                "Yahoo Finance is temporarily unavailable. "
-                "Please try again."
+                "Yahoo Finance is temporarily "
+                "unavailable. Please try again."
             ),
         )
 
@@ -269,13 +311,18 @@ def get_risk(ticker: str):
             raise HTTPException(
                 status_code=404,
                 detail=(
-                    f"No historical data found for {ticker}"
+                    f"No historical data found "
+                    f"for {ticker}"
                 ),
             )
 
-        prices = hist["Close"].tolist()
+        prices = hist[
+            "Close"
+        ].tolist()
 
-        returns = get_returns(prices)
+        returns = get_returns(
+            prices
+        )
 
         return {
             "ticker": ticker,
@@ -298,14 +345,15 @@ def get_risk(ticker: str):
 
     except Exception as e:
         print(
-            f"Risk calculation error for {ticker}: {e}"
+            f"Risk calculation error for "
+            f"{ticker}: {e}"
         )
 
         raise HTTPException(
             status_code=503,
             detail=(
-                "Unable to retrieve stock data right now. "
-                "Please try again."
+                "Unable to retrieve stock data "
+                "right now. Please try again."
             ),
         )
 
@@ -329,33 +377,39 @@ def get_montecarlo(ticker: str):
             raise HTTPException(
                 status_code=404,
                 detail=(
-                    f"No historical data found for {ticker}"
+                    f"No historical data found "
+                    f"for {ticker}"
                 ),
             )
 
-        prices = hist["Close"].tolist()
+        prices = hist[
+            "Close"
+        ].tolist()
 
-        return monte_carlo(prices)
+        return monte_carlo(
+            prices
+        )
 
     except HTTPException:
         raise
 
     except Exception as e:
         print(
-            f"Monte Carlo error for {ticker}: {e}"
+            f"Monte Carlo error for "
+            f"{ticker}: {e}"
         )
 
         raise HTTPException(
             status_code=503,
             detail=(
-                "Unable to retrieve stock data right now. "
-                "Please try again."
+                "Unable to retrieve stock data "
+                "right now. Please try again."
             ),
         )
 
 
 # =========================================================
-# AI RISK SUMMARY
+# GEMINI RISK SUMMARY
 # =========================================================
 
 @app.get("/stock/{ticker}/summary")
@@ -365,7 +419,6 @@ def get_summary(ticker: str):
     try:
         stock = yf.Ticker(ticker)
 
-        # Historical price data
         hist = stock.history(
             period="1y"
         )
@@ -374,50 +427,65 @@ def get_summary(ticker: str):
             raise HTTPException(
                 status_code=404,
                 detail=(
-                    f"No historical data found for {ticker}"
+                    f"No historical data found "
+                    f"for {ticker}"
                 ),
             )
 
-        prices = hist["Close"].tolist()
+        prices = hist[
+            "Close"
+        ].tolist()
 
-        # Try to get company information
+        # ---------------------------------------------
+        # Company information
+        # ---------------------------------------------
+
         try:
             info = stock.info
 
         except Exception as e:
             print(
-                f"Yahoo Finance info error for {ticker}: {e}"
+                f"Yahoo Finance info error "
+                f"for {ticker}: {e}"
             )
 
-            # Fallback to fast_info
             try:
                 fast_info = stock.fast_info
 
                 name = ticker
+
                 current_price = fast_info.get(
                     "lastPrice"
                 )
 
             except Exception as fallback_error:
                 print(
-                    "Yahoo Finance fast_info error for "
-                    f"{ticker}: {fallback_error}"
+                    "Yahoo Finance fast_info "
+                    f"error for {ticker}: "
+                    f"{fallback_error}"
                 )
 
                 name = ticker
                 current_price = prices[-1]
 
         else:
-            name = info.get(
-                "longName"
-            ) or ticker
+            name = (
+                info.get("longName")
+                or ticker
+            )
 
             current_price = (
                 info.get("currentPrice")
                 or prices[-1]
             )
 
-        returns = get_returns(prices)
+        # ---------------------------------------------
+        # Risk calculations
+        # ---------------------------------------------
+
+        returns = get_returns(
+            prices
+        )
 
         risk_data = {
             "ticker": ticker,
@@ -435,8 +503,14 @@ def get_summary(ticker: str):
                 historical_var(returns) * 100,
                 3,
             ),
-            "mc": monte_carlo(prices),
+            "mc": monte_carlo(
+                prices
+            ),
         }
+
+        # ---------------------------------------------
+        # Gemini prompt
+        # ---------------------------------------------
 
         prompt = f"""
 You are a professional private banker explaining investment risk
@@ -477,7 +551,8 @@ Do not give a generic disclaimer.
 
     except Exception as e:
         print(
-            f"Summary error for {ticker}: {e}"
+            f"Summary error for "
+            f"{ticker}: {e}"
         )
 
         raise HTTPException(
@@ -490,7 +565,7 @@ Do not give a generic disclaimer.
 
 
 # =========================================================
-# PORTFOLIO RISK + STOCK COMPARISON
+# PORTFOLIO RISK + COMPARISON
 # =========================================================
 
 @app.post("/portfolio/risk")
@@ -514,25 +589,37 @@ def portfolio_risk(data: dict):
 
     for holding in holdings:
         ticker = str(
-            holding.get("ticker", "")
+            holding.get(
+                "ticker",
+                "",
+            )
         ).strip().upper()
 
-        amount = holding.get("amount")
+        amount = holding.get(
+            "amount"
+        )
 
         if not ticker:
             raise HTTPException(
                 status_code=400,
-                detail="Every holding must have a ticker.",
+                detail=(
+                    "Every holding must have "
+                    "a ticker."
+                ),
             )
 
         try:
             amount = float(amount)
 
-        except (TypeError, ValueError):
+        except (
+            TypeError,
+            ValueError,
+        ):
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    f"Invalid investment amount for {ticker}."
+                    f"Invalid investment amount "
+                    f"for {ticker}."
                 ),
             )
 
@@ -540,8 +627,9 @@ def portfolio_risk(data: dict):
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    f"Investment amount for {ticker} "
-                    "must be greater than zero."
+                    f"Investment amount for "
+                    f"{ticker} must be greater "
+                    "than zero."
                 ),
             )
 
@@ -553,16 +641,21 @@ def portfolio_risk(data: dict):
         )
 
     # -----------------------------------------------------
-    # Prevent duplicate tickers
+    # Merge duplicate tickers
     # -----------------------------------------------------
 
     merged_holdings = {}
 
     for holding in cleaned_holdings:
-        ticker = holding["ticker"]
+        ticker = holding[
+            "ticker"
+        ]
 
         merged_holdings[ticker] = (
-            merged_holdings.get(ticker, 0)
+            merged_holdings.get(
+                ticker,
+                0,
+            )
             + holding["amount"]
         )
 
@@ -571,11 +664,12 @@ def portfolio_risk(data: dict):
             "ticker": ticker,
             "amount": amount,
         }
-        for ticker, amount in merged_holdings.items()
+        for ticker, amount
+        in merged_holdings.items()
     ]
 
     # -----------------------------------------------------
-    # Portfolio value
+    # Total portfolio value
     # -----------------------------------------------------
 
     total_value = sum(
@@ -587,26 +681,32 @@ def portfolio_risk(data: dict):
         raise HTTPException(
             status_code=400,
             detail=(
-                "Portfolio value must be greater than zero."
+                "Portfolio value must be "
+                "greater than zero."
             ),
         )
 
     # -----------------------------------------------------
-    # Retrieve historical data
+    # Historical data + individual metrics
     # -----------------------------------------------------
 
     all_returns = {}
     weights = {}
-
-    # Individual stock metrics used for comparison
     stock_stats = {}
 
     for holding in holdings:
-        ticker = holding["ticker"]
-        amount = holding["amount"]
+        ticker = holding[
+            "ticker"
+        ]
+
+        amount = holding[
+            "amount"
+        ]
 
         try:
-            stock = yf.Ticker(ticker)
+            stock = yf.Ticker(
+                ticker
+            )
 
             hist = stock.history(
                 period="1y"
@@ -616,27 +716,34 @@ def portfolio_risk(data: dict):
                 raise HTTPException(
                     status_code=404,
                     detail=(
-                        f"No historical data found for {ticker}"
+                        f"No historical data "
+                        f"found for {ticker}"
                     ),
                 )
 
-            prices = hist["Close"].tolist()
+            prices = hist[
+                "Close"
+            ].tolist()
 
             if len(prices) < 2:
                 raise HTTPException(
                     status_code=422,
                     detail=(
-                        f"Insufficient historical data for {ticker}"
+                        f"Insufficient historical "
+                        f"data for {ticker}"
                     ),
                 )
 
-            returns = get_returns(prices)
+            returns = get_returns(
+                prices
+            )
 
             if len(returns) == 0:
                 raise HTTPException(
                     status_code=422,
                     detail=(
-                        f"Unable to calculate returns for {ticker}"
+                        f"Unable to calculate "
+                        f"returns for {ticker}"
                     ),
                 )
 
@@ -646,32 +753,42 @@ def portfolio_risk(data: dict):
                 amount / total_value
             )
 
-            # -------------------------------------------------
-            # Individual stock metrics
-            # -------------------------------------------------
+            # ---------------------------------------------
+            # Individual stock comparison metrics
+            # ---------------------------------------------
 
             one_year_return = (
-                (prices[-1] / prices[0]) - 1
+                (
+                    prices[-1]
+                    / prices[0]
+                )
+                - 1
             ) * 100
 
             stock_stats[ticker] = {
                 "ticker": ticker,
 
                 "return_1y": round(
-                    float(one_year_return),
+                    float(
+                        one_year_return
+                    ),
                     2,
                 ),
 
                 "volatility": round(
                     float(
-                        volatility(returns)
+                        volatility(
+                            returns
+                        )
                     ) * 100,
                     3,
                 ),
 
                 "sharpe": round(
                     float(
-                        sharpe_ratio(returns)
+                        sharpe_ratio(
+                            returns
+                        )
                     ),
                     3,
                 ),
@@ -691,14 +808,15 @@ def portfolio_risk(data: dict):
 
         except Exception as e:
             print(
-                f"Portfolio data error for {ticker}: {e}"
+                f"Portfolio data error "
+                f"for {ticker}: {e}"
             )
 
             raise HTTPException(
                 status_code=503,
                 detail=(
-                    f"Unable to retrieve data for "
-                    f"{ticker}. Please try again."
+                    f"Unable to retrieve data "
+                    f"for {ticker}. Please try again."
                 ),
             )
 
@@ -725,8 +843,8 @@ def portfolio_risk(data: dict):
         raise HTTPException(
             status_code=422,
             detail=(
-                "Insufficient return history to "
-                "calculate portfolio risk."
+                "Insufficient return history "
+                "to calculate portfolio risk."
             ),
         )
 
@@ -753,17 +871,25 @@ def portfolio_risk(data: dict):
         2,
     ):
         min_pair_len = min(
-            len(all_returns[ticker_one]),
-            len(all_returns[ticker_two]),
+            len(
+                all_returns[
+                    ticker_one
+                ]
+            ),
+            len(
+                all_returns[
+                    ticker_two
+                ]
+            ),
         )
 
-        r1 = all_returns[ticker_one][
-            :min_pair_len
-        ]
+        r1 = all_returns[
+            ticker_one
+        ][:min_pair_len]
 
-        r2 = all_returns[ticker_two][
-            :min_pair_len
-        ]
+        r2 = all_returns[
+            ticker_two
+        ][:min_pair_len]
 
         if min_pair_len < 2:
             continue
@@ -775,7 +901,6 @@ def portfolio_risk(data: dict):
             )[0, 1]
         )
 
-        # Handle unusual numerical cases
         if np.isnan(corr):
             corr = 0.0
 
@@ -787,7 +912,7 @@ def portfolio_risk(data: dict):
         )
 
     # -----------------------------------------------------
-    # Compare holdings
+    # Relative holding comparison
     # -----------------------------------------------------
 
     comparison = build_stock_comparison(
