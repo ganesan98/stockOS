@@ -15,14 +15,135 @@ const API =
   process.env.REACT_APP_API_URL ||
   "https://portfolioos-backend-1qdb.onrender.com";
 
+const SearchIcon = () => (
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <circle cx="11" cy="11" r="7" />
+    <path d="m20 20-3.5-3.5" />
+  </svg>
+);
+
+const ArrowRight = () => (
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M5 12h14" />
+    <path d="m13 6 6 6-6 6" />
+  </svg>
+);
+
+const PlusIcon = () => (
+  <svg
+    width="15"
+    height="15"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    aria-hidden="true"
+  >
+    <path d="M12 5v14" />
+    <path d="M5 12h14" />
+  </svg>
+);
+
+const TrashIcon = () => (
+  <svg
+    width="15"
+    height="15"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    aria-hidden="true"
+  >
+    <path d="M4 7h16" />
+    <path d="M9 7V4h6v3" />
+    <path d="M7 7l1 13h8l1-13" />
+    <path d="M10 11v5" />
+    <path d="M14 11v5" />
+  </svg>
+);
+
+const ChartIcon = () => (
+  <svg
+    width="17"
+    height="17"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.7"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M4 19V5" />
+    <path d="M4 19h16" />
+    <path d="m7 15 3-4 3 2 5-6" />
+  </svg>
+);
+
+const ShieldIcon = () => (
+  <svg
+    width="17"
+    height="17"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.7"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M12 3 20 7v5c0 4.8-3.2 7.8-8 9-4.8-1.2-8-4.2-8-9V7z" />
+    <path d="m9 12 2 2 4-4" />
+  </svg>
+);
+
+const PortfolioIcon = () => (
+  <svg
+    width="17"
+    height="17"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.7"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <rect x="3" y="6" width="18" height="14" rx="2" />
+    <path d="M8 6V4h8v2" />
+    <path d="M12 12v4" />
+    <path d="M10 14h4" />
+  </svg>
+);
+
 export default function App() {
   const [ticker, setTicker] = useState("");
   const [info, setInfo] = useState(null);
   const [risk, setRisk] = useState(null);
   const [mc, setMc] = useState(null);
   const [history, setHistory] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const [summary, setSummary] = useState("");
 
   const [holdings, setHoldings] = useState([
@@ -30,7 +151,11 @@ export default function App() {
   ]);
 
   const [portfolio, setPortfolio] = useState(null);
+
   const [mode, setMode] = useState("single");
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function analyze() {
     if (!ticker.trim()) {
@@ -40,6 +165,7 @@ export default function App() {
 
     setLoading(true);
     setError("");
+
     setInfo(null);
     setRisk(null);
     setMc(null);
@@ -48,32 +174,90 @@ export default function App() {
     setPortfolio(null);
 
     try {
-      const t = ticker.trim().toUpperCase();
+      const symbol = ticker.trim().toUpperCase();
 
-      const [iRes, rRes, mRes, hRes, sRes] = await Promise.all([
-        axios.get(`${API}/stock/${t}`),
-        axios.get(`${API}/stock/${t}/risk`),
-        axios.get(`${API}/stock/${t}/montecarlo`),
-        axios.get(`${API}/stock/${t}/history`),
-        axios.get(`${API}/stock/${t}/summary`),
+      const [
+        infoResponse,
+        riskResponse,
+        monteCarloResponse,
+        historyResponse,
+        summaryResponse,
+      ] = await Promise.all([
+        axios.get(`${API}/stock/${symbol}`),
+        axios.get(`${API}/stock/${symbol}/risk`),
+        axios.get(`${API}/stock/${symbol}/montecarlo`),
+        axios.get(`${API}/stock/${symbol}/history`),
+        axios.get(`${API}/stock/${symbol}/summary`),
       ]);
 
-      setTicker(t);
-      setInfo(iRes.data);
-      setRisk(rRes.data);
-      setMc(mRes.data);
-      setHistory(Array.isArray(hRes.data) ? hRes.data.slice(-60) : []);
-      setSummary(sRes.data?.summary || "");
+      setTicker(symbol);
+      setInfo(infoResponse.data);
+      setRisk(riskResponse.data);
+      setMc(monteCarloResponse.data);
+      setHistory(
+        Array.isArray(historyResponse.data)
+          ? historyResponse.data.slice(-60)
+          : []
+      );
+      setSummary(summaryResponse.data?.summary || "");
     } catch (err) {
       console.error(err);
 
-      const backendMessage =
+      setError(
         err?.response?.data?.detail ||
-        err?.response?.data?.message;
+          "Unable to retrieve this security. Check the ticker and try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function analyzePortfolio() {
+    setLoading(true);
+    setError("");
+
+    setPortfolio(null);
+    setInfo(null);
+    setRisk(null);
+    setMc(null);
+    setHistory([]);
+    setSummary("");
+
+    try {
+      const validHoldings = holdings.filter(
+        (holding) =>
+          holding.ticker.trim() &&
+          holding.amount !== "" &&
+          Number(holding.amount) > 0
+      );
+
+      if (!validHoldings.length) {
+        setError(
+          "Add at least one stock and a valid investment amount."
+        );
+        setLoading(false);
+        return;
+      }
+
+      const payload = {
+        holdings: validHoldings.map((holding) => ({
+          ticker: holding.ticker.trim().toUpperCase(),
+          amount: Number(holding.amount),
+        })),
+      };
+
+      const response = await axios.post(
+        `${API}/portfolio/risk`,
+        payload
+      );
+
+      setPortfolio(response.data);
+    } catch (err) {
+      console.error(err);
 
       setError(
-        backendMessage ||
-          "Could not retrieve the requested data. Check the ticker and try again."
+        err?.response?.data?.detail ||
+          "Unable to analyze this portfolio. Check the holdings and try again."
       );
     } finally {
       setLoading(false);
@@ -82,6 +266,7 @@ export default function App() {
 
   function switchMode(nextMode) {
     setMode(nextMode);
+
     setInfo(null);
     setRisk(null);
     setMc(null);
@@ -91,35 +276,34 @@ export default function App() {
     setError("");
   }
 
-  function sharpeColor(value) {
-    const numeric = Number(value);
-
-    if (numeric > 1) return "positive";
-    if (numeric > 0) return "warning";
-    return "negative";
+  function updateHolding(index, field, value) {
+    setHoldings((current) =>
+      current.map((holding, currentIndex) =>
+        currentIndex === index
+          ? {
+              ...holding,
+              [field]: value,
+            }
+          : holding
+      )
+    );
   }
 
-  function riskLevel(value) {
-    const numeric = Math.abs(Number(value));
+  function addHolding() {
+    setHoldings((current) => [
+      ...current,
+      { ticker: "", amount: "" },
+    ]);
+  }
 
-    if (numeric < 1) {
-      return {
-        label: "LOW",
-        className: "positive",
-      };
-    }
+  function removeHolding(index) {
+    if (holdings.length === 1) return;
 
-    if (numeric < 2.5) {
-      return {
-        label: "MODERATE",
-        className: "warning",
-      };
-    }
-
-    return {
-      label: "HIGH",
-      className: "negative",
-    };
+    setHoldings((current) =>
+      current.filter(
+        (_, currentIndex) => currentIndex !== index
+      )
+    );
   }
 
   function formatNumber(value, decimals = 2) {
@@ -148,280 +332,222 @@ export default function App() {
       return "—";
     }
 
-    const safeCurrency =
-      typeof currency === "string" && currency.trim()
-        ? currency.toUpperCase()
-        : "USD";
-
     try {
       return new Intl.NumberFormat("en-IN", {
         style: "currency",
-        currency: safeCurrency,
+        currency: String(currency || "USD").toUpperCase(),
         maximumFractionDigits: 2,
       }).format(Number(value));
     } catch {
-      return `${safeCurrency} ${formatNumber(value)}`;
+      return `${currency || "USD"} ${formatNumber(value)}`;
     }
   }
 
-  async function analyzePortfolio() {
-    setLoading(true);
-    setError("");
-    setPortfolio(null);
-    setInfo(null);
-    setRisk(null);
-    setMc(null);
-    setHistory([]);
-    setSummary("");
+  function riskTone(value) {
+    const numeric = Math.abs(Number(value));
 
-    try {
-      const validHoldings = holdings.filter(
-        (holding) =>
-          holding.ticker.trim() &&
-          holding.amount !== "" &&
-          Number(holding.amount) > 0
-      );
-
-      if (!validHoldings.length) {
-        setError(
-          "Add at least one stock with a valid investment amount."
-        );
-        setLoading(false);
-        return;
-      }
-
-      const payload = {
-        holdings: validHoldings.map((holding) => ({
-          ticker: holding.ticker.trim().toUpperCase(),
-          amount: parseFloat(holding.amount),
-        })),
-      };
-
-      const res = await axios.post(
-        `${API}/portfolio/risk`,
-        payload
-      );
-
-      setPortfolio(res.data);
-    } catch (err) {
-      console.error(err);
-
-      const backendMessage =
-        err?.response?.data?.detail ||
-        err?.response?.data?.message;
-
-      setError(
-        backendMessage ||
-          "Could not analyze the portfolio. Check your holdings and try again."
-      );
-    } finally {
-      setLoading(false);
-    }
+    if (numeric < 1) return "positive";
+    if (numeric < 2.5) return "warning";
+    return "negative";
   }
 
-  function updateHolding(index, field, value) {
-    setHoldings((current) =>
-      current.map((holding, holdingIndex) =>
-        holdingIndex === index
-          ? {
-              ...holding,
-              [field]: value,
-            }
-          : holding
-      )
-    );
+  function sharpeTone(value) {
+    const numeric = Number(value);
+
+    if (numeric > 1) return "positive";
+    if (numeric > 0) return "warning";
+    return "negative";
   }
 
-  function removeHolding(index) {
-    if (holdings.length === 1) return;
-
-    setHoldings((current) =>
-      current.filter((_, holdingIndex) => holdingIndex !== index)
-    );
-  }
-
-  function addHolding() {
-    setHoldings((current) => [
-      ...current,
-      {
-        ticker: "",
-        amount: "",
-      },
-    ]);
-  }
+  const hasSingleResults = info && risk && mc;
 
   return (
-    <div className="app-shell">
-      <div className="background-glow glow-one" />
-      <div className="background-glow glow-two" />
+    <div className="app">
+      <div className="ambient ambient-one" />
+      <div className="ambient ambient-two" />
 
-      <main className="container">
+      <div className="app-frame">
         {/* HEADER */}
-        <header className="topbar">
-          <div className="brand">
-            <div className="brand-mark">P</div>
+        <header className="header">
+          <div className="brand-group">
+            <div className="brand-logo">
+              <span />
+              <span />
+              <span />
+            </div>
 
             <div>
-              <h1>PortfolioOS</h1>
+              <div className="brand-name">
+                PortfolioOS
+              </div>
 
-              <p>
-                Stock and portfolio risk analysis
-              </p>
+              <div className="brand-subtitle">
+                Stock &amp; portfolio risk analyzer
+              </div>
             </div>
           </div>
 
-          <div className="status-pill">
-            <span className="status-dot" />
-            LIVE MARKET DATA
+          <div className="connection-status">
+            <span className="connection-dot" />
+            Market data connected
           </div>
         </header>
 
-        {/* NAVIGATION */}
-        <section className="navigation">
-          <div className="tabs">
-            <button
-              className={`tab ${
-                mode === "single" ? "active" : ""
-              }`}
-              onClick={() => switchMode("single")}
-            >
-              <span>01</span>
-              Single Stock
-            </button>
+        {/* NAV */}
+        <nav className="main-nav">
+          <button
+            className={`nav-item ${
+              mode === "single" ? "active" : ""
+            }`}
+            onClick={() => switchMode("single")}
+          >
+            <ChartIcon />
+            <span>Stocks</span>
+          </button>
 
-            <button
-              className={`tab ${
-                mode === "portfolio" ? "active" : ""
-              }`}
-              onClick={() => switchMode("portfolio")}
-            >
-              <span>02</span>
-              Portfolio
-            </button>
-          </div>
-        </section>
+          <button
+            className={`nav-item ${
+              mode === "portfolio" ? "active" : ""
+            }`}
+            onClick={() => switchMode("portfolio")}
+          >
+            <PortfolioIcon />
+            <span>Portfolio</span>
+          </button>
+        </nav>
 
-        {/* SINGLE STOCK */}
+        {/* =====================================================
+            SINGLE STOCK
+           ===================================================== */}
+
         {mode === "single" && (
-          <>
-            {/* SEARCH */}
-            <section className="search-section">
-              <div className="search-heading">
-                <span className="eyebrow">
+          <main>
+            <section className="page-intro">
+              <div>
+                <span className="section-kicker">
                   STOCK ANALYSIS
                 </span>
 
-                <h2>Analyze a stock</h2>
+                <h1>Understand the risk behind a stock.</h1>
 
                 <p>
-                  Enter a ticker to evaluate performance,
-                  risk and simulated price scenarios.
+                  Search a security to review historical
+                  performance, risk metrics and simulated
+                  price scenarios.
                 </p>
               </div>
+            </section>
 
-              <div className="search-bar">
-                <div className="search-input-wrap">
-                  <span
-                    className="search-icon"
-                    aria-hidden="true"
-                  >
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <circle
-                        cx="11"
-                        cy="11"
-                        r="7"
-                      />
-                      <path d="m20 20-3.5-3.5" />
-                    </svg>
+            {/* SEARCH */}
+            <section className="search-panel">
+              <label
+                className="input-label"
+                htmlFor="stock-search"
+              >
+                Security
+              </label>
+
+              <div className="search-row">
+                <div className="search-field">
+                  <span className="search-symbol">
+                    <SearchIcon />
                   </span>
 
                   <input
+                    id="stock-search"
+                    type="text"
                     value={ticker}
-                    onChange={(e) =>
-                      setTicker(e.target.value)
+                    onChange={(event) =>
+                      setTicker(event.target.value)
                     }
-                    onKeyDown={(e) => {
+                    onKeyDown={(event) => {
                       if (
-                        e.key === "Enter" &&
+                        event.key === "Enter" &&
                         !loading
                       ) {
                         analyze();
                       }
                     }}
-                    placeholder="Enter ticker — AAPL, TCS.NS, RELIANCE.NS"
+                    placeholder="AAPL, MSFT, TCS.NS, RELIANCE.NS"
+                    autoComplete="off"
                     autoCapitalize="characters"
                     spellCheck="false"
-                    autoComplete="off"
                   />
                 </div>
 
                 <button
-                  className="primary-button"
+                  className="action-button"
                   onClick={analyze}
                   disabled={loading}
                 >
                   {loading ? (
                     <>
-                      <span className="spinner" />
+                      <span className="button-spinner" />
                       Analyzing
                     </>
                   ) : (
                     <>
                       Analyze
-                      <span className="button-arrow">
-                        →
-                      </span>
+                      <ArrowRight />
                     </>
                   )}
                 </button>
               </div>
 
-              <div className="search-hint">
-                <span>Examples</span>
-                AAPL · MSFT · TCS.NS · RELIANCE.NS
+              <div className="example-row">
+                <span>Try</span>
+                <button
+                  onClick={() => {
+                    setTicker("AAPL");
+                    setError("");
+                  }}
+                >
+                  AAPL
+                </button>
+                <button
+                  onClick={() => {
+                    setTicker("MSFT");
+                    setError("");
+                  }}
+                >
+                  MSFT
+                </button>
+                <button
+                  onClick={() => {
+                    setTicker("TCS.NS");
+                    setError("");
+                  }}
+                >
+                  TCS.NS
+                </button>
+                <button
+                  onClick={() => {
+                    setTicker("RELIANCE.NS");
+                    setError("");
+                  }}
+                >
+                  RELIANCE.NS
+                </button>
               </div>
             </section>
 
-            {error && mode === "single" && (
-              <div className="error-banner">
-                <span>!</span>
-                {error}
-              </div>
+            {error && (
+              <ErrorBanner message={error} />
             )}
 
-            {loading && mode === "single" && (
-              <div className="loading-panel">
-                <div className="loading-line" />
-
-                <div>
-                  <strong>
-                    Running stock analysis
-                  </strong>
-
-                  <p>
-                    Fetching market data and running
-                    quantitative risk calculations...
-                  </p>
-                </div>
-              </div>
+            {loading && (
+              <LoadingState
+                title="Analyzing security"
+                description="Retrieving market data and calculating risk metrics."
+              />
             )}
 
-            {/* STOCK RESULTS */}
-            {info && risk && mc && (
+            {hasSingleResults && (
               <>
-                {/* STOCK HERO */}
-                <section className="stock-hero">
-                  <div className="stock-identity">
-                    <div className="stock-avatar">
+                {/* STOCK HEADER */}
+                <section className="security-header">
+                  <div className="security-identity">
+                    <div className="security-avatar">
                       {String(
                         info.name || ticker
                       )
@@ -430,39 +556,27 @@ export default function App() {
                     </div>
 
                     <div>
-                      <div className="stock-name">
+                      <div className="security-name">
                         {info.name ||
                           "Unknown Security"}
                       </div>
 
-                      <div className="stock-meta">
+                      <div className="security-meta">
                         <span>
-                          {ticker
-                            .trim()
-                            .toUpperCase()}
+                          {ticker.toUpperCase()}
                         </span>
-
-                        <i />
-
-                        <span>
-                          {info.currency ||
-                            "USD"}
+                        <span className="meta-separator">
+                          ·
                         </span>
-
-                        <i />
-
                         <span>
-                          MARKET DATA
+                          {info.currency || "USD"}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="stock-price">
-                    <span className="price-label">
-                      CURRENT PRICE
-                    </span>
-
+                  <div className="price-block">
+                    <span>Current price</span>
                     <strong>
                       {formatCurrency(
                         info.price,
@@ -472,55 +586,50 @@ export default function App() {
                   </div>
                 </section>
 
-                {/* METRICS */}
-                <section className="metrics-section">
-                  <div className="section-heading-row">
-                    <div>
-                      <span className="eyebrow">
-                        RISK SNAPSHOT
-                      </span>
+                {/* RISK OVERVIEW */}
+                <section className="content-section">
+                  <SectionHeading
+                    eyebrow="RISK OVERVIEW"
+                    title="Key metrics"
+                    description="Derived from one year of historical price data."
+                  />
 
-                      <h2>Key metrics</h2>
-                    </div>
-
-                    <span className="data-badge">
-                      QUANTITATIVE
-                    </span>
-                  </div>
-
-                  <div className="metrics-grid">
+                  <div className="metric-grid">
                     <MetricCard
-                      label="Daily Volatility"
+                      label="Daily volatility"
                       value={`${formatNumber(
                         risk.volatility,
                         3
                       )}%`}
-                      detail={
-                        riskLevel(
-                          risk.volatility
-                        ).label
+                      caption={
+                        riskTone(risk.volatility) ===
+                        "positive"
+                          ? "Lower risk"
+                          : riskTone(
+                              risk.volatility
+                            ) === "warning"
+                          ? "Moderate"
+                          : "Higher risk"
                       }
-                      tone={
-                        riskLevel(
-                          risk.volatility
-                        ).className
-                      }
+                      tone={riskTone(
+                        risk.volatility
+                      )}
                     />
 
                     <MetricCard
-                      label="Sharpe Ratio"
+                      label="Sharpe ratio"
                       value={formatNumber(
                         risk.sharpe_ratio,
                         3
                       )}
-                      detail={
+                      caption={
                         risk.sharpe_ratio > 1
-                          ? "STRONG"
+                          ? "Strong"
                           : risk.sharpe_ratio > 0
-                          ? "POSITIVE"
-                          : "WEAK"
+                          ? "Positive"
+                          : "Weak"
                       }
-                      tone={sharpeColor(
+                      tone={sharpeTone(
                         risk.sharpe_ratio
                       )}
                     />
@@ -531,768 +640,728 @@ export default function App() {
                         risk.var_95,
                         3
                       )}%`}
-                      detail="95% CONFIDENCE"
+                      caption="95% confidence"
                       tone="negative"
                     />
 
                     <MetricCard
-                      label="Expected Price"
+                      label="Expected price"
                       value={formatCurrency(
                         mc.expected_price,
                         info.currency
                       )}
-                      detail="1 YEAR SIMULATION"
-                      tone="positive"
-                    />
-
-                    <MetricCard
-                      label="Worst Case"
-                      value={formatCurrency(
-                        mc.worst_case,
-                        info.currency
-                      )}
-                      detail="DOWNSIDE SCENARIO"
-                      tone="negative"
-                    />
-
-                    <MetricCard
-                      label="Best Case"
-                      value={formatCurrency(
-                        mc.best_case,
-                        info.currency
-                      )}
-                      detail="UPSIDE SCENARIO"
+                      caption="1 year simulation"
                       tone="positive"
                     />
                   </div>
                 </section>
 
-                {/* AI SUMMARY */}
-                {summary && (
-                  <section className="ai-card">
-                    <div className="ai-header">
-                      <div className="ai-icon">
-                        ✦
-                      </div>
+                {/* HISTORY + SUMMARY */}
+                <section className="two-column-section">
+                  <div className="panel chart-panel">
+                    <SectionHeading
+                      eyebrow="PRICE HISTORY"
+                      title="Recent performance"
+                      compact
+                    />
 
-                      <div>
-                        <span className="eyebrow">
-                          RISK INTERPRETATION
-                        </span>
-
-                        <h3>
-                          What the numbers mean
-                        </h3>
-                      </div>
-
-                      <span className="ai-badge">
-                        GEMINI
-                      </span>
+                    <div className="chart-meta">
+                      Last 60 trading sessions
                     </div>
 
-                    <p>{summary}</p>
-                  </section>
-                )}
-
-                {/* HISTORICAL CHART */}
-                <section className="charts-section">
-                  <div className="section-heading-row">
-                    <div>
-                      <span className="eyebrow">
-                        MARKET HISTORY
-                      </span>
-
-                      <h2>Price performance</h2>
-                    </div>
-
-                    <span className="chart-period">
-                      LAST 60 DAYS
-                    </span>
-                  </div>
-
-                  <div className="chart-box main-chart">
-                    <div className="chart-topline">
-                      <div>
-                        <span className="chart-title">
-                          Closing Price
-                        </span>
-
-                        <span className="chart-subtitle">
-                          Historical market data
-                        </span>
-                      </div>
-
-                      <div className="chart-indicator">
-                        <span />
-                        PRICE
-                      </div>
-                    </div>
-
-                    <ResponsiveContainer
-                      width="100%"
-                      height={360}
-                    >
-                      <LineChart
-                        data={history}
-                        margin={{
-                          top: 15,
-                          right: 10,
-                          left: 0,
-                          bottom: 0,
-                        }}
+                    <div className="chart-container">
+                      <ResponsiveContainer
+                        width="100%"
+                        height={330}
                       >
-                        <XAxis
-                          dataKey="Date"
-                          hide
-                        />
+                        <LineChart
+                          data={history}
+                          margin={{
+                            top: 10,
+                            right: 8,
+                            left: -18,
+                            bottom: 0,
+                          }}
+                        >
+                          <XAxis
+                            dataKey="Date"
+                            hide
+                          />
 
-                        <YAxis
-                          domain={["auto", "auto"]}
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{
-                            fill: "#555",
-                            fontSize: 11,
-                          }}
-                          width={50}
-                        />
+                          <YAxis
+                            domain={[
+                              "auto",
+                              "auto",
+                            ]}
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{
+                              fill: "#56616a",
+                              fontSize: 10,
+                            }}
+                            width={55}
+                          />
 
-                        <Tooltip
-                          contentStyle={{
-                            background:
-                              "#11151a",
-                            border:
-                              "1px solid #293039",
-                            borderRadius: "8px",
-                            color: "#fff",
-                          }}
-                          labelStyle={{
-                            color: "#777",
-                            marginBottom:
-                              "4px",
-                          }}
-                          formatter={(value) => [
-                            formatCurrency(
-                              value,
-                              info.currency
-                            ),
-                            "Close",
-                          ]}
-                        />
+                          <Tooltip
+                            cursor={{
+                              stroke:
+                                "rgba(255,255,255,.08)",
+                            }}
+                            contentStyle={{
+                              background:
+                                "#10151a",
+                              border:
+                                "1px solid #263038",
+                              borderRadius:
+                                "8px",
+                              color: "#f0f4f2",
+                              boxShadow:
+                                "0 10px 30px rgba(0,0,0,.35)",
+                            }}
+                            labelStyle={{
+                              color: "#69737b",
+                              marginBottom:
+                                "5px",
+                            }}
+                            formatter={(value) => [
+                              formatCurrency(
+                                value,
+                                info.currency
+                              ),
+                              "Close",
+                            ]}
+                          />
 
-                        <Line
-                          type="monotone"
-                          dataKey="Close"
-                          stroke="#00ff88"
-                          dot={false}
-                          strokeWidth={2.5}
-                          activeDot={{
-                            r: 5,
-                            stroke:
-                              "#00ff88",
-                            strokeWidth: 2,
-                            fill: "#0a0d0f",
-                          }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
+                          <Line
+                            type="monotone"
+                            dataKey="Close"
+                            stroke="#27e88b"
+                            strokeWidth={2}
+                            dot={false}
+                            activeDot={{
+                              r: 4,
+                              stroke:
+                                "#27e88b",
+                              strokeWidth: 2,
+                              fill: "#0b0f12",
+                            }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
+
+                  {summary && (
+                    <div className="panel interpretation-panel">
+                      <div className="interpretation-top">
+                        <div className="interpretation-icon">
+                          <ShieldIcon />
+                        </div>
+
+                        <div>
+                          <span className="panel-kicker">
+                            RISK INTERPRETATION
+                          </span>
+
+                          <h3>
+                            Putting the numbers in context
+                          </h3>
+                        </div>
+                      </div>
+
+                      <p className="interpretation-copy">
+                        {summary}
+                      </p>
+
+                      <div className="interpretation-source">
+                        <span className="source-dot" />
+                        Generated from the calculated
+                        risk metrics
+                      </div>
+                    </div>
+                  )}
                 </section>
 
                 {/* MONTE CARLO */}
-                <section className="charts-section">
-                  <div className="section-heading-row">
-                    <div>
-                      <span className="eyebrow">
-                        MONTE CARLO SIMULATION
-                      </span>
+                <section className="content-section">
+                  <SectionHeading
+                    eyebrow="MONTE CARLO SIMULATION"
+                    title="Potential price scenarios"
+                    description="Illustrative outcomes based on historical return behaviour."
+                    rightText="1 YEAR"
+                  />
 
-                      <h2>
-                        Potential price scenarios
-                      </h2>
-                    </div>
-
-                    <span className="chart-period">
-                      1 YEAR
-                    </span>
-                  </div>
-
-                  <div className="chart-box">
-                    <div className="scenario-summary">
+                  <div className="panel scenario-panel">
+                    <div className="scenario-grid">
                       <Scenario
-                        label="Worst"
+                        label="Worst case"
                         value={mc.worst_case}
                         tone="negative"
-                        currency={info.currency}
+                        currency={
+                          info.currency
+                        }
                       />
 
                       <Scenario
                         label="VaR 95%"
                         value={mc.var_95}
                         tone="negative"
-                        currency={info.currency}
+                        currency={
+                          info.currency
+                        }
                       />
 
                       <Scenario
                         label="Expected"
-                        value={mc.expected_price}
+                        value={
+                          mc.expected_price
+                        }
                         tone="neutral"
-                        currency={info.currency}
+                        currency={
+                          info.currency
+                        }
                       />
 
                       <Scenario
                         label="Current"
-                        value={mc.current_price}
+                        value={
+                          mc.current_price
+                        }
                         tone="neutral"
-                        currency={info.currency}
+                        currency={
+                          info.currency
+                        }
                       />
 
                       <Scenario
-                        label="Best"
+                        label="Best case"
                         value={mc.best_case}
                         tone="positive"
-                        currency={info.currency}
+                        currency={
+                          info.currency
+                        }
                       />
                     </div>
 
-                    <ResponsiveContainer
-                      width="100%"
-                      height={280}
-                    >
-                      <LineChart
-                        data={[
-                          {
-                            label: "Worst",
-                            price:
-                              mc.worst_case,
-                          },
-                          {
-                            label: "VaR 95%",
-                            price: mc.var_95,
-                          },
-                          {
-                            label: "Expected",
-                            price:
-                              mc.expected_price,
-                          },
-                          {
-                            label: "Current",
-                            price:
-                              mc.current_price,
-                          },
-                          {
-                            label: "Best",
-                            price:
-                              mc.best_case,
-                          },
-                        ]}
-                        margin={{
-                          top: 15,
-                          right: 10,
-                          left: 0,
-                          bottom: 5,
-                        }}
+                    <div className="scenario-chart">
+                      <ResponsiveContainer
+                        width="100%"
+                        height={290}
                       >
-                        <XAxis
-                          dataKey="label"
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{
-                            fill: "#555",
-                            fontSize: 10,
-                          }}
-                        />
-
-                        <YAxis
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{
-                            fill: "#555",
-                            fontSize: 10,
-                          }}
-                          width={60}
-                          tickFormatter={(value) =>
-                            formatNumber(
-                              value,
-                              0
-                            )
-                          }
-                        />
-
-                        <Tooltip
-                          contentStyle={{
-                            background:
-                              "#11151a",
-                            border:
-                              "1px solid #293039",
-                            borderRadius: "8px",
-                          }}
-                          formatter={(value) => [
-                            formatCurrency(
-                              value,
-                              info.currency
-                            ),
-                            "Price",
+                        <LineChart
+                          data={[
+                            {
+                              label: "Worst",
+                              price:
+                                mc.worst_case,
+                            },
+                            {
+                              label: "VaR 95%",
+                              price:
+                                mc.var_95,
+                            },
+                            {
+                              label: "Expected",
+                              price:
+                                mc.expected_price,
+                            },
+                            {
+                              label: "Current",
+                              price:
+                                mc.current_price,
+                            },
+                            {
+                              label: "Best",
+                              price:
+                                mc.best_case,
+                            },
                           ]}
-                        />
-
-                        <ReferenceLine
-                          y={mc.current_price}
-                          stroke="#444"
-                          strokeDasharray="5 5"
-                        />
-
-                        <Line
-                          type="monotone"
-                          dataKey="price"
-                          stroke="#ffcc00"
-                          dot={{
-                            r: 4,
-                            fill: "#ffcc00",
-                            strokeWidth: 0,
+                          margin={{
+                            top: 10,
+                            right: 8,
+                            left: -14,
+                            bottom: 0,
                           }}
-                          activeDot={{
-                            r: 6,
-                          }}
-                          strokeWidth={2}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
+                        >
+                          <XAxis
+                            dataKey="label"
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{
+                              fill: "#56616a",
+                              fontSize: 10,
+                            }}
+                          />
+
+                          <YAxis
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{
+                              fill: "#56616a",
+                              fontSize: 10,
+                            }}
+                            width={58}
+                          />
+
+                          <Tooltip
+                            contentStyle={{
+                              background:
+                                "#10151a",
+                              border:
+                                "1px solid #263038",
+                              borderRadius:
+                                "8px",
+                            }}
+                            formatter={(value) => [
+                              formatCurrency(
+                                value,
+                                info.currency
+                              ),
+                              "Price",
+                            ]}
+                          />
+
+                          <ReferenceLine
+                            y={
+                              mc.current_price
+                            }
+                            stroke="#39434b"
+                            strokeDasharray="5 5"
+                          />
+
+                          <Line
+                            type="monotone"
+                            dataKey="price"
+                            stroke="#e5c85b"
+                            strokeWidth={2}
+                            dot={{
+                              r: 4,
+                              fill: "#e5c85b",
+                              strokeWidth: 0,
+                            }}
+                            activeDot={{
+                              r: 6,
+                            }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
                 </section>
               </>
             )}
-          </>
+          </main>
         )}
 
-        {/* PORTFOLIO */}
+        {/* =====================================================
+            PORTFOLIO
+           ===================================================== */}
+
         {mode === "portfolio" && (
-          <>
-            <section className="search-section portfolio-intro">
-              <div className="search-heading">
-                <span className="eyebrow">
+          <main>
+            <section className="page-intro">
+              <div>
+                <span className="section-kicker">
                   PORTFOLIO ANALYSIS
                 </span>
 
-                <h2>
-                  Build and evaluate your portfolio
-                </h2>
+                <h1>Build a portfolio and compare the risk.</h1>
 
                 <p>
-                  Add your positions to measure
-                  portfolio risk and compare the
-                  risk-adjusted profile of each
-                  holding.
+                  Add your positions to understand the
+                  portfolio-level risk and see how each
+                  holding compares on a risk-adjusted basis.
                 </p>
               </div>
             </section>
 
-            <section className="holdings-panel">
+            {/* HOLDINGS */}
+            <section className="panel holdings-panel">
               <div className="panel-header">
                 <div>
-                  <span className="eyebrow">
-                    YOUR HOLDINGS
+                  <span className="panel-kicker">
+                    POSITIONS
                   </span>
 
-                  <h3>Portfolio composition</h3>
+                  <h3>Your holdings</h3>
                 </div>
 
-                <span className="holding-count">
+                <span className="position-count">
                   {holdings.length}{" "}
                   {holdings.length === 1
-                    ? "POSITION"
-                    : "POSITIONS"}
+                    ? "position"
+                    : "positions"}
                 </span>
               </div>
 
-              <div className="holding-header">
-                <span>SECURITY</span>
-                <span>INVESTMENT AMOUNT</span>
+              <div className="holdings-labels">
+                <span>Security</span>
+                <span>Investment</span>
                 <span />
               </div>
 
-              {holdings.map((holding, index) => (
-                <div
-                  className="holding-row"
-                  key={index}
-                >
-                  <div className="holding-input ticker-input">
-                    <span className="ticker-prefix">
-                      TICKER
-                    </span>
+              <div className="holdings-list">
+                {holdings.map(
+                  (holding, index) => (
+                    <div
+                      className="holding-row"
+                      key={index}
+                    >
+                      <div className="holding-field">
+                        <span className="field-prefix">
+                          TICKER
+                        </span>
 
-                    <input
-                      placeholder="e.g. TCS.NS"
-                      value={holding.ticker}
-                      onChange={(e) =>
-                        updateHolding(
-                          index,
-                          "ticker",
-                          e.target.value
-                        )
-                      }
-                      autoCapitalize="characters"
-                      spellCheck="false"
-                      autoComplete="off"
-                    />
-                  </div>
+                        <input
+                          type="text"
+                          placeholder="e.g. TCS.NS"
+                          value={
+                            holding.ticker
+                          }
+                          onChange={(event) =>
+                            updateHolding(
+                              index,
+                              "ticker",
+                              event.target.value
+                            )
+                          }
+                          autoCapitalize="characters"
+                          autoComplete="off"
+                          spellCheck="false"
+                        />
+                      </div>
 
-                  <div className="holding-input amount-input">
-                    <span>₹</span>
+                      <div className="holding-field amount-field">
+                        <span className="currency-prefix">
+                          ₹
+                        </span>
 
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      placeholder="40000"
-                      value={holding.amount}
-                      onChange={(e) =>
-                        updateHolding(
-                          index,
-                          "amount",
-                          e.target.value
-                        )
-                      }
-                    />
-                  </div>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="40,000"
+                          value={
+                            holding.amount
+                          }
+                          onChange={(event) =>
+                            updateHolding(
+                              index,
+                              "amount",
+                              event.target.value
+                            )
+                          }
+                        />
+                      </div>
 
-                  <button
-                    className="remove-button"
-                    onClick={() =>
-                      removeHolding(index)
-                    }
-                    disabled={holdings.length === 1}
-                    title="Remove holding"
-                    aria-label={`Remove holding ${
-                      index + 1
-                    }`}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
+                      <button
+                        className="icon-button"
+                        onClick={() =>
+                          removeHolding(index)
+                        }
+                        disabled={
+                          holdings.length === 1
+                        }
+                        aria-label={`Remove holding ${
+                          index + 1
+                        }`}
+                      >
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
 
-              <div className="holdings-footer">
+              <div className="holdings-actions">
                 <button
-                  className="add-btn"
+                  className="secondary-button"
                   onClick={addHolding}
                 >
-                  + Add another position
+                  <PlusIcon />
+                  Add position
                 </button>
 
                 <button
-                  className="primary-button portfolio-button"
+                  className="action-button"
                   onClick={analyzePortfolio}
                   disabled={loading}
                 >
                   {loading ? (
                     <>
-                      <span className="spinner" />
+                      <span className="button-spinner" />
                       Analyzing
                     </>
                   ) : (
                     <>
-                      Analyze Portfolio
-                      <span className="button-arrow">
-                        →
-                      </span>
+                      Analyze portfolio
+                      <ArrowRight />
                     </>
                   )}
                 </button>
               </div>
             </section>
 
-            {error && mode === "portfolio" && (
-              <div className="error-banner">
-                <span>!</span>
-                {error}
-              </div>
+            {error && (
+              <ErrorBanner message={error} />
             )}
 
-            {loading && mode === "portfolio" && (
-              <div className="loading-panel">
-                <div className="loading-line" />
-
-                <div>
-                  <strong>
-                    Calculating portfolio risk
-                  </strong>
-
-                  <p>
-                    Fetching holdings and calculating
-                    portfolio statistics...
-                  </p>
-                </div>
-              </div>
+            {loading && (
+              <LoadingState
+                title="Analyzing portfolio"
+                description="Retrieving holdings and calculating portfolio risk."
+              />
             )}
 
             {portfolio && (
               <>
-                {/* PORTFOLIO SNAPSHOT */}
-                <section className="metrics-section">
-                  <div className="section-heading-row">
-                    <div>
-                      <span className="eyebrow">
-                        PORTFOLIO SNAPSHOT
-                      </span>
+                {/* PORTFOLIO OVERVIEW */}
+                <section className="content-section">
+                  <SectionHeading
+                    eyebrow="PORTFOLIO OVERVIEW"
+                    title="Risk at a glance"
+                    description="Portfolio-level statistics calculated from historical returns."
+                  />
 
-                      <h2>Risk overview</h2>
-                    </div>
-                  </div>
-
-                  <div className="metrics-grid portfolio-metrics">
+                  <div className="metric-grid">
                     <MetricCard
-                      label="Total Value"
+                      label="Total value"
                       value={formatCurrency(
                         portfolio.total_value,
                         "INR"
                       )}
-                      detail="PORTFOLIO VALUE"
+                      caption="Portfolio value"
                       tone="positive"
                     />
 
                     <MetricCard
-                      label="Portfolio Volatility"
+                      label="Volatility"
                       value={`${formatNumber(
                         portfolio.portfolio_volatility,
                         3
                       )}%`}
-                      detail="DAILY RISK"
+                      caption="Daily risk"
                       tone="warning"
                     />
 
                     <MetricCard
-                      label="Sharpe Ratio"
+                      label="Sharpe ratio"
                       value={formatNumber(
                         portfolio.portfolio_sharpe,
                         3
                       )}
-                      detail="RISK-ADJUSTED RETURN"
-                      tone={sharpeColor(
+                      caption="Risk-adjusted return"
+                      tone={sharpeTone(
                         portfolio.portfolio_sharpe
                       )}
                     />
 
                     <MetricCard
-                      label="Portfolio VaR"
+                      label="Value at Risk"
                       value={`${formatNumber(
                         portfolio.portfolio_var_95,
                         3
                       )}%`}
-                      detail="95% CONFIDENCE"
+                      caption="95% confidence"
                       tone="negative"
                     />
                   </div>
                 </section>
 
-                {/* HOLDING COMPARISON */}
+                {/* COMPARISON */}
                 {Array.isArray(
                   portfolio.comparison
                 ) &&
                   portfolio.comparison.length > 0 && (
-                    <section className="comparison-section">
-                      <div className="section-heading-row">
-                        <div>
-                          <span className="eyebrow">
-                            HOLDING COMPARISON
-                          </span>
+                    <section className="content-section">
+                      <SectionHeading
+                        eyebrow="HOLDING COMPARISON"
+                        title="Which holdings stand out?"
+                        description="A relative risk-adjusted comparison within this portfolio."
+                        rightText="NOT A BUY / SELL SIGNAL"
+                      />
 
-                          <h2>
-                            How your holdings compare
-                          </h2>
-                        </div>
+                      <div className="panel comparison-panel">
+                        <div className="comparison-table">
+                          <div className="comparison-head">
+                            <span>Rank</span>
+                            <span>Security</span>
+                            <span>1Y return</span>
+                            <span>Volatility</span>
+                            <span>Sharpe</span>
+                            <span>VaR 95%</span>
+                            <span>Score</span>
+                          </div>
 
-                        <span className="chart-period">
-                          RISK-ADJUSTED
-                        </span>
-                      </div>
+                          {portfolio.comparison.map(
+                            (stock) => (
+                              <div
+                                className={`comparison-row ${
+                                  stock.rank === 1
+                                    ? "is-top"
+                                    : ""
+                                }`}
+                                key={
+                                  stock.ticker
+                                }
+                              >
+                                <span className="rank-cell">
+                                  {stock.rank}
+                                </span>
 
-                      <div className="comparison-card">
-                        <div className="comparison-header">
-                          <span>RANK</span>
-                          <span>SECURITY</span>
-                          <span>1Y RETURN</span>
-                          <span>VOLATILITY</span>
-                          <span>SHARPE</span>
-                          <span>VAR 95%</span>
-                          <span>SCORE</span>
-                        </div>
+                                <div className="comparison-stock">
+                                  <strong>
+                                    {
+                                      stock.ticker
+                                    }
+                                  </strong>
 
-                        {portfolio.comparison.map(
-                          (stock) => (
-                            <div
-                              className={`comparison-row ${
-                                stock.rank === 1
-                                  ? "top-stock"
-                                  : ""
-                              }`}
-                              key={stock.ticker}
-                            >
-                              <span className="rank">
-                                #
-                                {stock.rank}
-                              </span>
+                                  {stock.rank ===
+                                    1 && (
+                                    <span>
+                                      Strongest risk-adjusted
+                                      profile
+                                    </span>
+                                  )}
+                                </div>
 
-                              <div className="comparison-security">
-                                <strong>
-                                  {
-                                    stock.ticker
+                                <span
+                                  className={
+                                    Number(
+                                      stock.return_1y
+                                    ) >= 0
+                                      ? "positive-text"
+                                      : "negative-text"
                                   }
-                                </strong>
-
-                                {stock.rank ===
-                                  1 && (
-                                  <small>
-                                    STRONGEST
-                                    PROFILE
-                                  </small>
-                                )}
-                              </div>
-
-                              <span
-                                className={
-                                  Number(
+                                >
+                                  {Number(
                                     stock.return_1y
                                   ) >= 0
-                                    ? "comparison-positive"
-                                    : "comparison-negative"
-                                }
-                              >
-                                {Number(
-                                  stock.return_1y
-                                ) >= 0
-                                  ? "+"
-                                  : ""}
-                                {
-                                  stock.return_1y
-                                }
-                                %
-                              </span>
+                                    ? "+"
+                                    : ""}
+                                  {
+                                    stock.return_1y
+                                  }
+                                  %
+                                </span>
 
-                              <span>
-                                {
-                                  stock.volatility
-                                }
-                                %
-                              </span>
+                                <span>
+                                  {
+                                    stock.volatility
+                                  }
+                                  %
+                                </span>
 
-                              <span
-                                className={
-                                  Number(
+                                <span
+                                  className={
+                                    Number(
+                                      stock.sharpe
+                                    ) > 1
+                                      ? "positive-text"
+                                      : Number(
+                                          stock.sharpe
+                                        ) > 0
+                                      ? "warning-text"
+                                      : "negative-text"
+                                  }
+                                >
+                                  {
                                     stock.sharpe
-                                  ) > 1
-                                    ? "comparison-positive"
-                                    : Number(
-                                        stock.sharpe
-                                      ) > 0
-                                    ? "comparison-warning"
-                                    : "comparison-negative"
-                                }
-                              >
-                                {stock.sharpe}
-                              </span>
+                                  }
+                                </span>
 
-                              <span>
-                                {stock.var_95}
-                                %
-                              </span>
+                                <span>
+                                  {stock.var_95}%
+                                </span>
 
-                              <strong className="comparison-score">
-                                {stock.score}
-                              </strong>
-                            </div>
-                          )
-                        )}
+                                <strong className="score-cell">
+                                  {stock.score}
+                                </strong>
+                              </div>
+                            )
+                          )}
+                        </div>
 
-                        <div className="comparison-footnote">
-                          Score is relative to the
-                          holdings in this portfolio
-                          and is intended for
-                          comparison, not as a
-                          buy or sell recommendation.
+                        <div className="table-note">
+                          The score combines return,
+                          Sharpe ratio, volatility and
+                          downside risk. It ranks only the
+                          holdings entered into this portfolio.
                         </div>
                       </div>
                     </section>
                   )}
 
-                {/* PORTFOLIO ALLOCATION + CORRELATION */}
-                <section className="portfolio-grid">
-                  <div className="chart-box portfolio-box">
-                    <div className="chart-topline">
-                      <div>
-                        <span className="chart-title">
-                          Portfolio Weights
-                        </span>
+                {/* ALLOCATION + CORRELATION */}
+                <section className="two-column-section portfolio-detail-section">
+                  <div className="panel">
+                    <SectionHeading
+                      eyebrow="ALLOCATION"
+                      title="Portfolio weights"
+                      description="Share of total invested capital."
+                      compact
+                    />
 
-                        <span className="chart-subtitle">
-                          Allocation by position
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="corr-grid">
+                    <div className="detail-list">
                       {Object.entries(
                         portfolio.weights || {}
-                      ).map(([t, w]) => (
+                      ).map(([tickerName, weight]) => (
                         <div
-                          className="corr-row"
-                          key={t}
+                          className="detail-row"
+                          key={tickerName}
                         >
-                          <div className="weight-name">
-                            <span className="weight-dot" />
-                            {t}
+                          <div className="detail-name">
+                            <span className="detail-dot" />
+                            <span>
+                              {tickerName}
+                            </span>
                           </div>
 
-                          <span className="corr-val">
-                            {w}%
-                          </span>
+                          <strong>
+                            {weight}%
+                          </strong>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  <div className="chart-box portfolio-box">
-                    <div className="chart-topline">
-                      <div>
-                        <span className="chart-title">
-                          Correlation Matrix
-                        </span>
+                  <div className="panel">
+                    <SectionHeading
+                      eyebrow="DIVERSIFICATION"
+                      title="Correlation"
+                      description="Relationship between portfolio holdings."
+                      compact
+                    />
 
-                        <span className="chart-subtitle">
-                          Relationship between holdings
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="corr-grid">
+                    <div className="detail-list">
                       {Object.entries(
                         portfolio.correlation || {}
-                      ).map(([pair, val]) => (
-                        <div
-                          className="corr-row"
-                          key={pair}
-                        >
-                          <span>
-                            {pair
-                              .replaceAll(
-                                "_",
-                                " ↔ "
-                              )}
-                          </span>
+                      ).length > 0 ? (
+                        Object.entries(
+                          portfolio.correlation
+                        ).map(
+                          ([pair, value]) => (
+                            <div
+                              className="detail-row"
+                              key={pair}
+                            >
+                              <span>
+                                {pair.replaceAll(
+                                  "_",
+                                  " ↔ "
+                                )}
+                              </span>
 
-                          <span className="corr-val">
-                            {val}
-                          </span>
-                        </div>
-                      ))}
-
-                      {!Object.keys(
-                        portfolio.correlation || {}
-                      ).length && (
-                        <div className="empty-state">
-                          Correlation data is
-                          unavailable for the current
-                          portfolio.
+                              <strong className="correlation-value">
+                                {value}
+                              </strong>
+                            </div>
+                          )
+                        )
+                      ) : (
+                        <div className="empty-detail">
+                          Correlation data is unavailable
+                          for this portfolio.
                         </div>
                       )}
                     </div>
@@ -1300,16 +1369,52 @@ export default function App() {
                 </section>
               </>
             )}
-          </>
+          </main>
         )}
 
-        <footer>
+        <footer className="footer">
           <span>PORTFOLIOOS</span>
-          <span>
-            QUANTITATIVE RISK ANALYTICS
-          </span>
+          <span>QUANTITATIVE RISK ANALYTICS</span>
         </footer>
-      </main>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   COMPONENTS
+   ========================================================= */
+
+function SectionHeading({
+  eyebrow,
+  title,
+  description,
+  rightText,
+  compact = false,
+}) {
+  return (
+    <div
+      className={`section-heading ${
+        compact ? "compact" : ""
+      }`}
+    >
+      <div>
+        <span className="section-kicker">
+          {eyebrow}
+        </span>
+
+        <h2>{title}</h2>
+
+        {description && (
+          <p>{description}</p>
+        )}
+      </div>
+
+      {rightText && (
+        <span className="section-note">
+          {rightText}
+        </span>
+      )}
     </div>
   );
 }
@@ -1317,32 +1422,31 @@ export default function App() {
 function MetricCard({
   label,
   value,
-  detail,
-  tone = "positive",
+  caption,
+  tone = "neutral",
 }) {
   return (
-    <div className="metric-card">
-      <div className="metric-top">
-        <span className="metric-label">
-          {label}
-        </span>
+    <article className="metric-card">
+      <div className="metric-card-top">
+        <span>{label}</span>
 
         <span
-          className={`metric-signal ${tone}`}
-          aria-hidden="true"
-        >
-          ●
-        </span>
+          className={`metric-dot ${tone}`}
+        />
       </div>
 
-      <div className={`metric-value ${tone}`}>
+      <strong
+        className={`metric-number ${tone}`}
+      >
         {value}
-      </div>
+      </strong>
 
-      <div className={`metric-detail ${tone}`}>
-        {detail}
-      </div>
-    </div>
+      <span
+        className={`metric-caption ${tone}`}
+      >
+        {caption}
+      </span>
+    </article>
   );
 }
 
@@ -1350,14 +1454,14 @@ function Scenario({
   label,
   value,
   tone,
-  currency = "USD",
+  currency,
 }) {
   return (
-    <div className="scenario">
+    <div className="scenario-item">
       <span>{label}</span>
 
       <strong className={tone}>
-        {formatScenarioCurrency(
+        {formatScenarioValue(
           value,
           currency
         )}
@@ -1366,15 +1470,14 @@ function Scenario({
   );
 }
 
-function formatScenarioCurrency(
+function formatScenarioValue(
   value,
-  currency = "USD"
+  currency
 ) {
   if (
     value === null ||
     value === undefined ||
-    value === "" ||
-    Number.isNaN(Number(value))
+    value === ""
   ) {
     return "—";
   }
@@ -1382,11 +1485,9 @@ function formatScenarioCurrency(
   try {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
-      currency:
-        typeof currency === "string" &&
-        currency.trim()
-          ? currency.toUpperCase()
-          : "USD",
+      currency: String(
+        currency || "USD"
+      ).toUpperCase(),
       maximumFractionDigits: 2,
     }).format(Number(value));
   } catch {
@@ -1397,4 +1498,35 @@ function formatScenarioCurrency(
       }
     );
   }
+}
+
+function ErrorBanner({ message }) {
+  return (
+    <div className="error-banner">
+      <span className="error-icon">!</span>
+
+      <div>
+        <strong>Something went wrong</strong>
+        <p>{message}</p>
+      </div>
+    </div>
+  );
+}
+
+function LoadingState({
+  title,
+  description,
+}) {
+  return (
+    <div className="loading-state">
+      <div className="loading-indicator">
+        <span />
+      </div>
+
+      <div>
+        <strong>{title}</strong>
+        <p>{description}</p>
+      </div>
+    </div>
+  );
 }
