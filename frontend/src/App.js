@@ -11,7 +11,9 @@ import {
 } from "recharts";
 import "./App.css";
 
-const API = "https://portfolioos-backend-1qdb.onrender.com";
+const API =
+  process.env.REACT_APP_API_URL ||
+  "https://portfolioos-backend-1qdb.onrender.com";
 
 export default function App() {
   const [ticker, setTicker] = useState("");
@@ -22,14 +24,19 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [summary, setSummary] = useState("");
+
   const [holdings, setHoldings] = useState([
     { ticker: "", amount: "" },
   ]);
+
   const [portfolio, setPortfolio] = useState(null);
   const [mode, setMode] = useState("single");
 
   async function analyze() {
-    if (!ticker.trim()) return;
+    if (!ticker.trim()) {
+      setError("Enter a ticker symbol to continue.");
+      return;
+    }
 
     setLoading(true);
     setError("");
@@ -51,14 +58,23 @@ export default function App() {
         axios.get(`${API}/stock/${t}/summary`),
       ]);
 
+      setTicker(t);
       setInfo(iRes.data);
       setRisk(rRes.data);
       setMc(mRes.data);
-      setHistory(hRes.data.slice(-60));
-      setSummary(sRes.data.summary);
+      setHistory(Array.isArray(hRes.data) ? hRes.data.slice(-60) : []);
+      setSummary(sRes.data?.summary || "");
     } catch (err) {
       console.error(err);
-      setError("Could not fetch data. Check the ticker symbol and try again.");
+
+      const backendMessage =
+        err?.response?.data?.detail ||
+        err?.response?.data?.message;
+
+      setError(
+        backendMessage ||
+          "Could not retrieve the requested data. Check the ticker and try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -76,8 +92,10 @@ export default function App() {
   }
 
   function sharpeColor(value) {
-    if (value > 1) return "positive";
-    if (value > 0) return "warning";
+    const numeric = Number(value);
+
+    if (numeric > 1) return "positive";
+    if (numeric > 0) return "warning";
     return "negative";
   }
 
@@ -85,25 +103,65 @@ export default function App() {
     const numeric = Math.abs(Number(value));
 
     if (numeric < 1) {
-      return { label: "LOW", className: "positive" };
+      return {
+        label: "LOW",
+        className: "positive",
+      };
     }
 
     if (numeric < 2.5) {
-      return { label: "MODERATE", className: "warning" };
+      return {
+        label: "MODERATE",
+        className: "warning",
+      };
     }
 
-    return { label: "HIGH", className: "negative" };
+    return {
+      label: "HIGH",
+      className: "negative",
+    };
   }
 
   function formatNumber(value, decimals = 2) {
-    if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    if (
+      value === null ||
+      value === undefined ||
+      value === "" ||
+      Number.isNaN(Number(value))
+    ) {
       return "—";
     }
 
-    return Number(value).toLocaleString(undefined, {
+    return Number(value).toLocaleString("en-IN", {
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
     });
+  }
+
+  function formatCurrency(value, currency = "USD") {
+    if (
+      value === null ||
+      value === undefined ||
+      value === "" ||
+      Number.isNaN(Number(value))
+    ) {
+      return "—";
+    }
+
+    const safeCurrency =
+      typeof currency === "string" && currency.trim()
+        ? currency.toUpperCase()
+        : "USD";
+
+    try {
+      return new Intl.NumberFormat("en-IN", {
+        style: "currency",
+        currency: safeCurrency,
+        maximumFractionDigits: 2,
+      }).format(Number(value));
+    } catch {
+      return `${safeCurrency} ${formatNumber(value)}`;
+    }
   }
 
   async function analyzePortfolio() {
@@ -118,43 +176,78 @@ export default function App() {
 
     try {
       const validHoldings = holdings.filter(
-        (h) => h.ticker.trim() && h.amount !== ""
+        (holding) =>
+          holding.ticker.trim() &&
+          holding.amount !== "" &&
+          Number(holding.amount) > 0
       );
 
       if (!validHoldings.length) {
-        setError("Add at least one stock before analyzing.");
+        setError(
+          "Add at least one stock with a valid investment amount."
+        );
         setLoading(false);
         return;
       }
 
       const payload = {
-        holdings: validHoldings.map((h) => ({
-          ticker: h.ticker.trim().toUpperCase(),
-          amount: parseFloat(h.amount),
+        holdings: validHoldings.map((holding) => ({
+          ticker: holding.ticker.trim().toUpperCase(),
+          amount: parseFloat(holding.amount),
         })),
       };
 
-      const res = await axios.post(`${API}/portfolio/risk`, payload);
+      const res = await axios.post(
+        `${API}/portfolio/risk`,
+        payload
+      );
 
       setPortfolio(res.data);
     } catch (err) {
       console.error(err);
-      setError("Failed to analyze portfolio. Check your holdings.");
+
+      const backendMessage =
+        err?.response?.data?.detail ||
+        err?.response?.data?.message;
+
+      setError(
+        backendMessage ||
+          "Could not analyze the portfolio. Check your holdings and try again."
+      );
     } finally {
       setLoading(false);
     }
   }
 
   function updateHolding(index, field, value) {
-    const updated = [...holdings];
-    updated[index][field] = value;
-    setHoldings(updated);
+    setHoldings((current) =>
+      current.map((holding, holdingIndex) =>
+        holdingIndex === index
+          ? {
+              ...holding,
+              [field]: value,
+            }
+          : holding
+      )
+    );
   }
 
   function removeHolding(index) {
     if (holdings.length === 1) return;
 
-    setHoldings(holdings.filter((_, i) => i !== index));
+    setHoldings((current) =>
+      current.filter((_, holdingIndex) => holdingIndex !== index)
+    );
+  }
+
+  function addHolding() {
+    setHoldings((current) => [
+      ...current,
+      {
+        ticker: "",
+        amount: "",
+      },
+    ]);
   }
 
   return (
@@ -170,15 +263,16 @@ export default function App() {
 
             <div>
               <h1>PortfolioOS</h1>
+
               <p>
-                Risk intelligence for modern portfolios
+                Stock and portfolio risk analysis
               </p>
             </div>
           </div>
 
           <div className="status-pill">
             <span className="status-dot" />
-            MARKET ANALYTICS
+            LIVE MARKET DATA
           </div>
         </header>
 
@@ -213,25 +307,60 @@ export default function App() {
             {/* SEARCH */}
             <section className="search-section">
               <div className="search-heading">
-                <span className="eyebrow">MARKET SCANNER</span>
-                <h2>Analyze a security</h2>
+                <span className="eyebrow">
+                  STOCK ANALYSIS
+                </span>
+
+                <h2>Analyze a stock</h2>
+
                 <p>
-                  Enter a Yahoo Finance ticker to generate a complete
-                  risk profile.
+                  Enter a ticker to evaluate performance,
+                  risk and simulated price scenarios.
                 </p>
               </div>
 
               <div className="search-bar">
                 <div className="search-input-wrap">
-                  <span className="search-icon">$</span>
+                  <span
+                    className="search-icon"
+                    aria-hidden="true"
+                  >
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle
+                        cx="11"
+                        cy="11"
+                        r="7"
+                      />
+                      <path d="m20 20-3.5-3.5" />
+                    </svg>
+                  </span>
 
                   <input
                     value={ticker}
-                    onChange={(e) => setTicker(e.target.value)}
-                    onKeyDown={(e) =>
-                      e.key === "Enter" && analyze()
+                    onChange={(e) =>
+                      setTicker(e.target.value)
                     }
+                    onKeyDown={(e) => {
+                      if (
+                        e.key === "Enter" &&
+                        !loading
+                      ) {
+                        analyze();
+                      }
+                    }}
                     placeholder="Enter ticker — AAPL, TCS.NS, RELIANCE.NS"
+                    autoCapitalize="characters"
+                    spellCheck="false"
+                    autoComplete="off"
                   />
                 </div>
 
@@ -248,7 +377,9 @@ export default function App() {
                   ) : (
                     <>
                       Analyze
-                      <span className="button-arrow">→</span>
+                      <span className="button-arrow">
+                        →
+                      </span>
                     </>
                   )}
                 </button>
@@ -260,21 +391,25 @@ export default function App() {
               </div>
             </section>
 
-            {error && (
+            {error && mode === "single" && (
               <div className="error-banner">
                 <span>!</span>
                 {error}
               </div>
             )}
 
-            {loading && (
+            {loading && mode === "single" && (
               <div className="loading-panel">
                 <div className="loading-line" />
+
                 <div>
-                  <strong>Running risk analysis</strong>
+                  <strong>
+                    Running stock analysis
+                  </strong>
+
                   <p>
-                    Fetching market data and running Monte Carlo
-                    simulations...
+                    Fetching market data and running
+                    quantitative risk calculations...
                   </p>
                 </div>
               </div>
@@ -287,24 +422,38 @@ export default function App() {
                 <section className="stock-hero">
                   <div className="stock-identity">
                     <div className="stock-avatar">
-                      {String(info.name || ticker)
+                      {String(
+                        info.name || ticker
+                      )
                         .charAt(0)
                         .toUpperCase()}
                     </div>
 
                     <div>
                       <div className="stock-name">
-                        {info.name || "Unknown Security"}
+                        {info.name ||
+                          "Unknown Security"}
                       </div>
 
                       <div className="stock-meta">
                         <span>
-                          {ticker.trim().toUpperCase()}
+                          {ticker
+                            .trim()
+                            .toUpperCase()}
                         </span>
+
                         <i />
-                        <span>{info.currency || "USD"}</span>
+
+                        <span>
+                          {info.currency ||
+                            "USD"}
+                        </span>
+
                         <i />
-                        <span>LIVE ANALYSIS</span>
+
+                        <span>
+                          MARKET DATA
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -315,8 +464,10 @@ export default function App() {
                     </span>
 
                     <strong>
-                      {info.currency || "$"}{" "}
-                      {formatNumber(info.price)}
+                      {formatCurrency(
+                        info.price,
+                        info.currency
+                      )}
                     </strong>
                   </div>
                 </section>
@@ -328,11 +479,12 @@ export default function App() {
                       <span className="eyebrow">
                         RISK SNAPSHOT
                       </span>
+
                       <h2>Key metrics</h2>
                     </div>
 
                     <span className="data-badge">
-                      6 SIGNALS
+                      QUANTITATIVE
                     </span>
                   </div>
 
@@ -343,8 +495,16 @@ export default function App() {
                         risk.volatility,
                         3
                       )}%`}
-                      detail={riskLevel(risk.volatility).label}
-                      tone={riskLevel(risk.volatility).className}
+                      detail={
+                        riskLevel(
+                          risk.volatility
+                        ).label
+                      }
+                      tone={
+                        riskLevel(
+                          risk.volatility
+                        ).className
+                      }
                     />
 
                     <MetricCard
@@ -360,7 +520,9 @@ export default function App() {
                           ? "POSITIVE"
                           : "WEAK"
                       }
-                      tone={sharpeColor(risk.sharpe_ratio)}
+                      tone={sharpeColor(
+                        risk.sharpe_ratio
+                      )}
                     />
 
                     <MetricCard
@@ -375,23 +537,30 @@ export default function App() {
 
                     <MetricCard
                       label="Expected Price"
-                      value={formatNumber(
-                        mc.expected_price
+                      value={formatCurrency(
+                        mc.expected_price,
+                        info.currency
                       )}
-                      detail="1 YEAR FORECAST"
+                      detail="1 YEAR SIMULATION"
                       tone="positive"
                     />
 
                     <MetricCard
                       label="Worst Case"
-                      value={formatNumber(mc.worst_case)}
+                      value={formatCurrency(
+                        mc.worst_case,
+                        info.currency
+                      )}
                       detail="DOWNSIDE SCENARIO"
                       tone="negative"
                     />
 
                     <MetricCard
                       label="Best Case"
-                      value={formatNumber(mc.best_case)}
+                      value={formatCurrency(
+                        mc.best_case,
+                        info.currency
+                      )}
                       detail="UPSIDE SCENARIO"
                       tone="positive"
                     />
@@ -402,17 +571,22 @@ export default function App() {
                 {summary && (
                   <section className="ai-card">
                     <div className="ai-header">
-                      <div className="ai-icon">✦</div>
+                      <div className="ai-icon">
+                        ✦
+                      </div>
 
                       <div>
                         <span className="eyebrow">
-                          AI RISK ANALYSIS
+                          RISK INTERPRETATION
                         </span>
-                        <h3>What the numbers mean</h3>
+
+                        <h3>
+                          What the numbers mean
+                        </h3>
                       </div>
 
                       <span className="ai-badge">
-                        GENERATED
+                        GEMINI
                       </span>
                     </div>
 
@@ -420,13 +594,14 @@ export default function App() {
                   </section>
                 )}
 
-                {/* CHARTS */}
+                {/* HISTORICAL CHART */}
                 <section className="charts-section">
                   <div className="section-heading-row">
                     <div>
                       <span className="eyebrow">
                         MARKET HISTORY
                       </span>
+
                       <h2>Price performance</h2>
                     </div>
 
@@ -441,6 +616,7 @@ export default function App() {
                         <span className="chart-title">
                           Closing Price
                         </span>
+
                         <span className="chart-subtitle">
                           Historical market data
                         </span>
@@ -474,23 +650,32 @@ export default function App() {
                           domain={["auto", "auto"]}
                           axisLine={false}
                           tickLine={false}
-                          tick={{ fill: "#555", fontSize: 11 }}
-                          width={45}
+                          tick={{
+                            fill: "#555",
+                            fontSize: 11,
+                          }}
+                          width={50}
                         />
 
                         <Tooltip
                           contentStyle={{
-                            background: "#11151a",
-                            border: "1px solid #293039",
+                            background:
+                              "#11151a",
+                            border:
+                              "1px solid #293039",
                             borderRadius: "8px",
                             color: "#fff",
                           }}
                           labelStyle={{
                             color: "#777",
-                            marginBottom: "4px",
+                            marginBottom:
+                              "4px",
                           }}
                           formatter={(value) => [
-                            formatNumber(value),
+                            formatCurrency(
+                              value,
+                              info.currency
+                            ),
                             "Close",
                           ]}
                         />
@@ -503,7 +688,8 @@ export default function App() {
                           strokeWidth={2.5}
                           activeDot={{
                             r: 5,
-                            stroke: "#00ff88",
+                            stroke:
+                              "#00ff88",
                             strokeWidth: 2,
                             fill: "#0a0d0f",
                           }}
@@ -518,9 +704,12 @@ export default function App() {
                   <div className="section-heading-row">
                     <div>
                       <span className="eyebrow">
-                        MONTE CARLO ENGINE
+                        MONTE CARLO SIMULATION
                       </span>
-                      <h2>Potential price scenarios</h2>
+
+                      <h2>
+                        Potential price scenarios
+                      </h2>
                     </div>
 
                     <span className="chart-period">
@@ -534,30 +723,35 @@ export default function App() {
                         label="Worst"
                         value={mc.worst_case}
                         tone="negative"
+                        currency={info.currency}
                       />
 
                       <Scenario
                         label="VaR 95%"
                         value={mc.var_95}
                         tone="negative"
+                        currency={info.currency}
                       />
 
                       <Scenario
                         label="Expected"
                         value={mc.expected_price}
                         tone="neutral"
+                        currency={info.currency}
                       />
 
                       <Scenario
                         label="Current"
                         value={mc.current_price}
                         tone="neutral"
+                        currency={info.currency}
                       />
 
                       <Scenario
                         label="Best"
                         value={mc.best_case}
                         tone="positive"
+                        currency={info.currency}
                       />
                     </div>
 
@@ -569,7 +763,8 @@ export default function App() {
                         data={[
                           {
                             label: "Worst",
-                            price: mc.worst_case,
+                            price:
+                              mc.worst_case,
                           },
                           {
                             label: "VaR 95%",
@@ -577,15 +772,18 @@ export default function App() {
                           },
                           {
                             label: "Expected",
-                            price: mc.expected_price,
+                            price:
+                              mc.expected_price,
                           },
                           {
                             label: "Current",
-                            price: mc.current_price,
+                            price:
+                              mc.current_price,
                           },
                           {
                             label: "Best",
-                            price: mc.best_case,
+                            price:
+                              mc.best_case,
                           },
                         ]}
                         margin={{
@@ -612,17 +810,28 @@ export default function App() {
                             fill: "#555",
                             fontSize: 10,
                           }}
-                          width={50}
+                          width={60}
+                          tickFormatter={(value) =>
+                            formatNumber(
+                              value,
+                              0
+                            )
+                          }
                         />
 
                         <Tooltip
                           contentStyle={{
-                            background: "#11151a",
-                            border: "1px solid #293039",
+                            background:
+                              "#11151a",
+                            border:
+                              "1px solid #293039",
                             borderRadius: "8px",
                           }}
                           formatter={(value) => [
-                            formatNumber(value),
+                            formatCurrency(
+                              value,
+                              info.currency
+                            ),
                             "Price",
                           ]}
                         />
@@ -662,12 +871,18 @@ export default function App() {
             <section className="search-section portfolio-intro">
               <div className="search-heading">
                 <span className="eyebrow">
-                  PORTFOLIO BUILDER
+                  PORTFOLIO ANALYSIS
                 </span>
-                <h2>Analyze your portfolio</h2>
+
+                <h2>
+                  Build and evaluate your portfolio
+                </h2>
+
                 <p>
-                  Add your holdings to calculate portfolio-level
-                  risk, volatility and correlations.
+                  Add your positions to measure
+                  portfolio risk and compare the
+                  risk-adjusted profile of each
+                  holding.
                 </p>
               </div>
             </section>
@@ -678,6 +893,7 @@ export default function App() {
                   <span className="eyebrow">
                     YOUR HOLDINGS
                   </span>
+
                   <h3>Portfolio composition</h3>
                 </div>
 
@@ -696,12 +912,17 @@ export default function App() {
               </div>
 
               {holdings.map((holding, index) => (
-                <div className="holding-row" key={index}>
-                  <div className="holding-input">
-                    <span>$</span>
+                <div
+                  className="holding-row"
+                  key={index}
+                >
+                  <div className="holding-input ticker-input">
+                    <span className="ticker-prefix">
+                      TICKER
+                    </span>
 
                     <input
-                      placeholder="Ticker e.g. TCS.NS"
+                      placeholder="e.g. TCS.NS"
                       value={holding.ticker}
                       onChange={(e) =>
                         updateHolding(
@@ -710,6 +931,9 @@ export default function App() {
                           e.target.value
                         )
                       }
+                      autoCapitalize="characters"
+                      spellCheck="false"
+                      autoComplete="off"
                     />
                   </div>
 
@@ -718,6 +942,8 @@ export default function App() {
 
                     <input
                       type="number"
+                      min="0"
+                      step="1"
                       placeholder="40000"
                       value={holding.amount}
                       onChange={(e) =>
@@ -732,9 +958,14 @@ export default function App() {
 
                   <button
                     className="remove-button"
-                    onClick={() => removeHolding(index)}
+                    onClick={() =>
+                      removeHolding(index)
+                    }
                     disabled={holdings.length === 1}
                     title="Remove holding"
+                    aria-label={`Remove holding ${
+                      index + 1
+                    }`}
                   >
                     ×
                   </button>
@@ -744,12 +975,7 @@ export default function App() {
               <div className="holdings-footer">
                 <button
                   className="add-btn"
-                  onClick={() =>
-                    setHoldings([
-                      ...holdings,
-                      { ticker: "", amount: "" },
-                    ])
-                  }
+                  onClick={addHolding}
                 >
                   + Add another position
                 </button>
@@ -767,21 +993,23 @@ export default function App() {
                   ) : (
                     <>
                       Analyze Portfolio
-                      <span className="button-arrow">→</span>
+                      <span className="button-arrow">
+                        →
+                      </span>
                     </>
                   )}
                 </button>
               </div>
             </section>
 
-            {error && (
+            {error && mode === "portfolio" && (
               <div className="error-banner">
                 <span>!</span>
                 {error}
               </div>
             )}
 
-            {loading && (
+            {loading && mode === "portfolio" && (
               <div className="loading-panel">
                 <div className="loading-line" />
 
@@ -792,7 +1020,7 @@ export default function App() {
 
                   <p>
                     Fetching holdings and calculating
-                    correlations...
+                    portfolio statistics...
                   </p>
                 </div>
               </div>
@@ -800,12 +1028,14 @@ export default function App() {
 
             {portfolio && (
               <>
+                {/* PORTFOLIO SNAPSHOT */}
                 <section className="metrics-section">
                   <div className="section-heading-row">
                     <div>
                       <span className="eyebrow">
                         PORTFOLIO SNAPSHOT
                       </span>
+
                       <h2>Risk overview</h2>
                     </div>
                   </div>
@@ -813,9 +1043,10 @@ export default function App() {
                   <div className="metrics-grid portfolio-metrics">
                     <MetricCard
                       label="Total Value"
-                      value={`₹${formatNumber(
-                        portfolio.total_value
-                      )}`}
+                      value={formatCurrency(
+                        portfolio.total_value,
+                        "INR"
+                      )}
                       detail="PORTFOLIO VALUE"
                       tone="positive"
                     />
@@ -854,6 +1085,137 @@ export default function App() {
                   </div>
                 </section>
 
+                {/* HOLDING COMPARISON */}
+                {Array.isArray(
+                  portfolio.comparison
+                ) &&
+                  portfolio.comparison.length > 0 && (
+                    <section className="comparison-section">
+                      <div className="section-heading-row">
+                        <div>
+                          <span className="eyebrow">
+                            HOLDING COMPARISON
+                          </span>
+
+                          <h2>
+                            How your holdings compare
+                          </h2>
+                        </div>
+
+                        <span className="chart-period">
+                          RISK-ADJUSTED
+                        </span>
+                      </div>
+
+                      <div className="comparison-card">
+                        <div className="comparison-header">
+                          <span>RANK</span>
+                          <span>SECURITY</span>
+                          <span>1Y RETURN</span>
+                          <span>VOLATILITY</span>
+                          <span>SHARPE</span>
+                          <span>VAR 95%</span>
+                          <span>SCORE</span>
+                        </div>
+
+                        {portfolio.comparison.map(
+                          (stock) => (
+                            <div
+                              className={`comparison-row ${
+                                stock.rank === 1
+                                  ? "top-stock"
+                                  : ""
+                              }`}
+                              key={stock.ticker}
+                            >
+                              <span className="rank">
+                                #
+                                {stock.rank}
+                              </span>
+
+                              <div className="comparison-security">
+                                <strong>
+                                  {
+                                    stock.ticker
+                                  }
+                                </strong>
+
+                                {stock.rank ===
+                                  1 && (
+                                  <small>
+                                    STRONGEST
+                                    PROFILE
+                                  </small>
+                                )}
+                              </div>
+
+                              <span
+                                className={
+                                  Number(
+                                    stock.return_1y
+                                  ) >= 0
+                                    ? "comparison-positive"
+                                    : "comparison-negative"
+                                }
+                              >
+                                {Number(
+                                  stock.return_1y
+                                ) >= 0
+                                  ? "+"
+                                  : ""}
+                                {
+                                  stock.return_1y
+                                }
+                                %
+                              </span>
+
+                              <span>
+                                {
+                                  stock.volatility
+                                }
+                                %
+                              </span>
+
+                              <span
+                                className={
+                                  Number(
+                                    stock.sharpe
+                                  ) > 1
+                                    ? "comparison-positive"
+                                    : Number(
+                                        stock.sharpe
+                                      ) > 0
+                                    ? "comparison-warning"
+                                    : "comparison-negative"
+                                }
+                              >
+                                {stock.sharpe}
+                              </span>
+
+                              <span>
+                                {stock.var_95}
+                                %
+                              </span>
+
+                              <strong className="comparison-score">
+                                {stock.score}
+                              </strong>
+                            </div>
+                          )
+                        )}
+
+                        <div className="comparison-footnote">
+                          Score is relative to the
+                          holdings in this portfolio
+                          and is intended for
+                          comparison, not as a
+                          buy or sell recommendation.
+                        </div>
+                      </div>
+                    </section>
+                  )}
+
+                {/* PORTFOLIO ALLOCATION + CORRELATION */}
                 <section className="portfolio-grid">
                   <div className="chart-box portfolio-box">
                     <div className="chart-topline">
@@ -870,7 +1232,7 @@ export default function App() {
 
                     <div className="corr-grid">
                       {Object.entries(
-                        portfolio.weights
+                        portfolio.weights || {}
                       ).map(([t, w]) => (
                         <div
                           className="corr-row"
@@ -904,17 +1266,18 @@ export default function App() {
 
                     <div className="corr-grid">
                       {Object.entries(
-                        portfolio.correlation
+                        portfolio.correlation || {}
                       ).map(([pair, val]) => (
                         <div
                           className="corr-row"
                           key={pair}
                         >
                           <span>
-                            {pair.replace(
-                              "_",
-                              " ↔ "
-                            )}
+                            {pair
+                              .replaceAll(
+                                "_",
+                                " ↔ "
+                              )}
                           </span>
 
                           <span className="corr-val">
@@ -922,6 +1285,16 @@ export default function App() {
                           </span>
                         </div>
                       ))}
+
+                      {!Object.keys(
+                        portfolio.correlation || {}
+                      ).length && (
+                        <div className="empty-state">
+                          Correlation data is
+                          unavailable for the current
+                          portfolio.
+                        </div>
+                      )}
                     </div>
                   </div>
                 </section>
@@ -932,7 +1305,9 @@ export default function App() {
 
         <footer>
           <span>PORTFOLIOOS</span>
-          <span>RISK INTELLIGENCE ENGINE</span>
+          <span>
+            QUANTITATIVE RISK ANALYTICS
+          </span>
         </footer>
       </main>
     </div>
@@ -948,9 +1323,14 @@ function MetricCard({
   return (
     <div className="metric-card">
       <div className="metric-top">
-        <span className="metric-label">{label}</span>
+        <span className="metric-label">
+          {label}
+        </span>
 
-        <span className={`metric-signal ${tone}`}>
+        <span
+          className={`metric-signal ${tone}`}
+          aria-hidden="true"
+        >
           ●
         </span>
       </div>
@@ -966,18 +1346,55 @@ function MetricCard({
   );
 }
 
-function Scenario({ label, value, tone }) {
+function Scenario({
+  label,
+  value,
+  tone,
+  currency = "USD",
+}) {
   return (
     <div className="scenario">
       <span>{label}</span>
 
       <strong className={tone}>
-        {value === null || value === undefined
-          ? "—"
-          : Number(value).toLocaleString(undefined, {
-              maximumFractionDigits: 2,
-            })}
+        {formatScenarioCurrency(
+          value,
+          currency
+        )}
       </strong>
     </div>
   );
+}
+
+function formatScenarioCurrency(
+  value,
+  currency = "USD"
+) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === "" ||
+    Number.isNaN(Number(value))
+  ) {
+    return "—";
+  }
+
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency:
+        typeof currency === "string" &&
+        currency.trim()
+          ? currency.toUpperCase()
+          : "USD",
+      maximumFractionDigits: 2,
+    }).format(Number(value));
+  } catch {
+    return Number(value).toLocaleString(
+      "en-IN",
+      {
+        maximumFractionDigits: 2,
+      }
+    );
+  }
 }
