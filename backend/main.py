@@ -13,7 +13,7 @@ from finance import (
 import os
 import json
 from dotenv import load_dotenv
-from google import genai
+from groq import Groq
 from itertools import combinations
 import numpy as np
 
@@ -24,9 +24,13 @@ import numpy as np
 
 load_dotenv()
 
-client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_MODEL = "openai/gpt-oss-120b"
+
+client = Groq(
+    api_key=GROQ_API_KEY
 )
+
 
 app = FastAPI(
     title="PortfolioOS API",
@@ -43,15 +47,12 @@ app.add_middleware(
 
 
 # =========================================================
-# TICKER DIRECTORY (for search / autocomplete)
+# TICKER DIRECTORY
 # =========================================================
-# Loaded once at startup from tickers.json, which is built
-# offline by build_ticker_list.py from NASDAQ Trader's
-# official symbol directory files. Kept in memory so /search
-# never has to call yfinance or hit the network.
 
 TICKERS_PATH = os.path.join(
-    os.path.dirname(__file__), "tickers.json"
+    os.path.dirname(__file__),
+    "tickers.json",
 )
 
 try:
@@ -64,18 +65,25 @@ except Exception as e:
     )
     TICKER_DIRECTORY = []
 
-# Precompute lowercase fields once so /search never
-# re-lowercases the whole list on every request.
+
 for _entry in TICKER_DIRECTORY:
-    _entry["_symbol_lower"] = _entry["symbol"].lower()
-    _entry["_name_lower"] = _entry["name"].lower()
+    _entry["_symbol_lower"] = _entry[
+        "symbol"
+    ].lower()
+
+    _entry["_name_lower"] = _entry[
+        "name"
+    ].lower()
 
 
 # =========================================================
 # HELPERS
 # =========================================================
 
-def normalize_scores(values, higher_is_better=True):
+def normalize_scores(
+    values,
+    higher_is_better=True,
+):
     """
     Convert values into relative 0-100 scores.
 
@@ -203,13 +211,21 @@ def root():
 # =========================================================
 
 @app.get("/search")
-def search_tickers(q: str, limit: int = 10):
+def search_tickers(
+    q: str,
+    limit: int = 10,
+):
     query = q.strip().lower()
 
     if not query:
-        return {"results": []}
+        return {
+            "results": []
+        }
 
-    limit = max(1, min(limit, 25))
+    limit = max(
+        1,
+        min(limit, 25),
+    )
 
     symbol_matches = []
     name_matches = []
@@ -219,19 +235,36 @@ def search_tickers(q: str, limit: int = 10):
             break
 
         if entry["_symbol_lower"] == query:
-            symbol_matches.insert(0, entry)
-        elif entry["_symbol_lower"].startswith(query):
-            symbol_matches.append(entry)
+            symbol_matches.insert(
+                0,
+                entry,
+            )
+
+        elif entry[
+            "_symbol_lower"
+        ].startswith(query):
+            symbol_matches.append(
+                entry
+            )
+
         elif (
-            len(symbol_matches) + len(name_matches)
+            len(symbol_matches)
+            + len(name_matches)
             < limit
             and query in entry["_name_lower"]
         ):
-            name_matches.append(entry)
+            name_matches.append(
+                entry
+            )
 
-    symbol_matches.sort(key=lambda e: e["symbol"])
+    symbol_matches.sort(
+        key=lambda e: e["symbol"]
+    )
 
-    combined = (symbol_matches + name_matches)[:limit]
+    combined = (
+        symbol_matches
+        + name_matches
+    )[:limit]
 
     results = [
         {
@@ -243,7 +276,9 @@ def search_tickers(q: str, limit: int = 10):
         for entry in combined
     ]
 
-    return {"results": results}
+    return {
+        "results": results
+    }
 
 
 # =========================================================
@@ -487,7 +522,7 @@ def get_montecarlo(ticker: str):
 
 
 # =========================================================
-# GEMINI RISK SUMMARY
+# GROQ AI RISK SUMMARY
 # =========================================================
 
 @app.get("/stock/{ticker}/summary")
@@ -587,7 +622,7 @@ def get_summary(ticker: str):
         }
 
         # ---------------------------------------------
-        # Gemini prompt
+        # Groq prompt
         # ---------------------------------------------
 
         prompt = f"""
@@ -607,21 +642,62 @@ Given this data for {risk_data['name']} ({ticker}):
 - Monte Carlo Best Case:
   {risk_data['mc']['best_case']}
 
-Write a 3 sentence plain-English risk summary.
+Write exactly 3 concise sentences in plain English.
+
+Sentence 1:
+Describe the stock's overall risk profile using the volatility
+and Sharpe ratio.
+
+Sentence 2:
+Explain the potential downside using VaR and the Monte Carlo
+worst-case scenario.
+
+Sentence 3:
+Explain the expected and upside scenario using the Monte Carlo
+expected and best-case prices.
 
 Be direct and specific with the numbers.
-Explain what the risk means for the investor's actual money.
+Explain what the risk means for an actual investor.
 Avoid financial jargon.
-Do not give a generic disclaimer.
+Do not make up information.
+Do not provide a generic disclaimer.
+Do not say you are an AI.
 """
 
-        response = client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=prompt,
+        response = client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a professional financial "
+                        "risk analyst. Analyze only the "
+                        "provided numerical data. "
+                        "Be concise, precise, balanced, "
+                        "and easy for a retail investor "
+                        "to understand."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+            reasoning_effort="medium",
+            temperature=0.2,
+            max_tokens=300,
+        )
+
+        summary = (
+            response
+            .choices[0]
+            .message
+            .content
+            .strip()
         )
 
         return {
-            "summary": response.text
+            "summary": summary
         }
 
     except HTTPException:
@@ -629,7 +705,7 @@ Do not give a generic disclaimer.
 
     except Exception as e:
         print(
-            f"Summary error for "
+            f"Groq summary error for "
             f"{ticker}: {e}"
         )
 
@@ -648,6 +724,7 @@ Do not give a generic disclaimer.
 
 @app.post("/portfolio/risk")
 def portfolio_risk(data: dict):
+
     holdings = data.get(
         "holdings",
         [],
@@ -666,6 +743,7 @@ def portfolio_risk(data: dict):
     cleaned_holdings = []
 
     for holding in holdings:
+
         ticker = str(
             holding.get(
                 "ticker",
@@ -725,6 +803,7 @@ def portfolio_risk(data: dict):
     merged_holdings = {}
 
     for holding in cleaned_holdings:
+
         ticker = holding[
             "ticker"
         ]
@@ -773,6 +852,7 @@ def portfolio_risk(data: dict):
     stock_stats = {}
 
     for holding in holdings:
+
         ticker = holding[
             "ticker"
         ]
@@ -914,7 +994,8 @@ def portfolio_risk(data: dict):
 
     min_len = min(
         len(returns)
-        for returns in all_returns.values()
+        for returns
+        in all_returns.values()
     )
 
     if min_len <= 0:
