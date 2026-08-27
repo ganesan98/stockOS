@@ -167,6 +167,7 @@ export default function App() {
 
   const [mode, setMode] = useState("single");
   const [loading, setLoading] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const [error, setError] = useState("");
 
   /* -------------------------------------------------------
@@ -179,9 +180,9 @@ export default function App() {
       return;
     }
 
-    setLoading(true);
-    setError("");
+    const symbol = ticker.trim().toUpperCase();
 
+    setError("");
     setInfo(null);
     setRisk(null);
     setMc(null);
@@ -189,37 +190,55 @@ export default function App() {
     setSummary("");
     setPortfolio(null);
 
-    try {
-      const symbol = ticker.trim().toUpperCase();
+    setLoading(true);
+    setSummaryLoading(true);
 
-      const [
-        infoResponse,
-        riskResponse,
-        monteCarloResponse,
-        historyResponse,
-        summaryResponse,
-      ] = await Promise.all([
-        axios.get(`${API}/stock/${symbol}`),
-        axios.get(`${API}/stock/${symbol}/risk`),
-        axios.get(`${API}/stock/${symbol}/montecarlo`),
-        axios.get(`${API}/stock/${symbol}/history`),
-        axios.get(`${API}/stock/${symbol}/summary`),
+    // Fast calls resolve independently so each section can render
+    // as soon as its own data is ready, instead of waiting on the
+    // slowest endpoint (the AI summary).
+    const infoPromise = axios
+      .get(`${API}/stock/${symbol}`)
+      .then((res) => setInfo(res.data));
+
+    const riskPromise = axios
+      .get(`${API}/stock/${symbol}/risk`)
+      .then((res) => setRisk(res.data));
+
+    const mcPromise = axios
+      .get(`${API}/stock/${symbol}/montecarlo`)
+      .then((res) => setMc(res.data));
+
+    const historyPromise = axios
+      .get(`${API}/stock/${symbol}/history`)
+      .then((res) => {
+        setHistory(
+          Array.isArray(res.data) ? res.data.slice(-60) : []
+        );
+      });
+
+    // Slow AI summary call is tracked separately and never blocks
+    // the rest of the page.
+    axios
+      .get(`${API}/stock/${symbol}/summary`)
+      .then((res) => {
+        setSummary(res.data?.summary || "");
+      })
+      .catch((err) => {
+        console.error(err);
+      })
+      .finally(() => {
+        setSummaryLoading(false);
+      });
+
+    try {
+      await Promise.all([
+        infoPromise,
+        riskPromise,
+        mcPromise,
+        historyPromise,
       ]);
 
       setTicker(symbol);
-      setInfo(infoResponse.data);
-      setRisk(riskResponse.data);
-      setMc(monteCarloResponse.data);
-
-      setHistory(
-        Array.isArray(historyResponse.data)
-          ? historyResponse.data.slice(-60)
-          : []
-      );
-
-      setSummary(
-        summaryResponse.data?.summary || ""
-      );
     } catch (err) {
       console.error(err);
 
@@ -246,6 +265,7 @@ export default function App() {
     setMc(null);
     setHistory([]);
     setSummary("");
+    setSummaryLoading(false);
 
     try {
       const validHoldings = holdings.filter(
@@ -300,6 +320,7 @@ export default function App() {
     setMc(null);
     setHistory([]);
     setSummary("");
+    setSummaryLoading(false);
     setPortfolio(null);
     setError("");
   }
@@ -824,7 +845,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {summary && (
+                  {(summary || summaryLoading) && (
                     <div className="panel interpretation-panel">
                       <div className="interpretation-top">
                         <div className="interpretation-icon">
@@ -842,15 +863,30 @@ export default function App() {
                         </div>
                       </div>
 
-                      <p className="interpretation-copy">
-                        {summary}
-                      </p>
+                      {summaryLoading ? (
+                        <div className="interpretation-loading">
+                          <span className="summary-skeleton-line" />
+                          <span className="summary-skeleton-line" />
+                          <span className="summary-skeleton-line short" />
 
-                      <div className="interpretation-source">
-                        <span className="source-dot" />
-                        Generated from the calculated
-                        risk metrics
-                      </div>
+                          <div className="interpretation-loading-note">
+                            <span className="loading-dot" />
+                            Generating risk interpretation
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="interpretation-copy">
+                            {summary}
+                          </p>
+
+                          <div className="interpretation-source">
+                            <span className="source-dot" />
+                            Generated from the calculated
+                            risk metrics
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
                 </section>
@@ -1278,7 +1314,7 @@ export default function App() {
                             <span>Volatility</span>
                             <span>Sharpe</span>
                             <span>VaR 95%</span>
-                            <span>Score</span>
+                            <span>Gain / Loss</span>
                           </div>
 
                           {portfolio.comparison.map(
@@ -1365,8 +1401,49 @@ export default function App() {
                                   %
                                 </span>
 
-                                <strong className="score-cell">
-                                  {stock.score}
+                                <strong
+                                  className={`gain-cell ${
+                                    Number(
+                                      stock.return_1y
+                                    ) >= 0
+                                      ? "positive-text"
+                                      : "negative-text"
+                                  }`}
+                                >
+                                  {(() => {
+                                    const weightPct =
+                                      Number(
+                                        portfolio
+                                          .weights?.[
+                                          stock
+                                            .ticker
+                                        ]
+                                      ) || 0;
+
+                                    const invested =
+                                      (weightPct /
+                                        100) *
+                                      Number(
+                                        portfolio.total_value ||
+                                          0
+                                      );
+
+                                    const gain =
+                                      invested *
+                                      (Number(
+                                        stock.return_1y
+                                      ) /
+                                        100);
+
+                                    return `${
+                                      gain >= 0
+                                        ? "+"
+                                        : ""
+                                    }${formatCurrency(
+                                      gain,
+                                      "INR"
+                                    )}`;
+                                  })()}
                                 </strong>
                               </div>
                             )
@@ -1374,11 +1451,13 @@ export default function App() {
                         </div>
 
                         <div className="table-note">
-                          The score combines return,
-                          Sharpe ratio, volatility and
-                          downside risk. It ranks only
-                          the holdings entered into this
-                          portfolio.
+                          Rank is based on a
+                          risk-adjusted score combining
+                          return, Sharpe ratio, volatility
+                          and downside risk. Gain / loss
+                          reflects the 1-year return
+                          applied to your invested amount
+                          for each holding.
                         </div>
                       </div>
                     </section>

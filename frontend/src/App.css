@@ -932,7 +932,7 @@ input:focus-visible {
 .metric-card-top > span:first-child {
   color: var(--muted);
 
-  font-size: 0.54rem;
+  font-size: 0.66rem;
   font-weight: 600;
 
   text-transform: uppercase;
@@ -1006,26 +1006,26 @@ input:focus-visible {
 
   margin-top: 7px;
 
-  font-size: 0.49rem;
+  font-size: 0.72rem;
   font-weight: 550;
 
-  letter-spacing: 0.55px;
+  letter-spacing: 0.4px;
 }
 
 .metric-caption.positive {
-  color: var(--green-dim);
+  color: var(--green);
 }
 
 .metric-caption.warning {
-  color: #ac9326;
+  color: var(--yellow);
 }
 
 .metric-caption.negative {
-  color: #a94747;
+  color: var(--red);
 }
 
 .metric-caption.neutral {
-  color: var(--muted-dark);
+  color: var(--muted);
 }
 
 /* =========================================================
@@ -1631,6 +1631,19 @@ input:focus-visible {
 
   font-size: 0.67rem;
   font-weight: 650;
+}
+
+.gain-cell {
+  font-size: 0.7rem;
+  font-weight: 650;
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  letter-spacing: -0.02em;
 }
 
 .table-note {
@@ -2340,5 +2353,70 @@ input:focus-visible {
 
   .security-meta {
     font-size: 0.49rem;
+  }
+}
+/* =========================================================
+   AI SUMMARY LOADING SKELETON
+   ========================================================= */
+
+.interpretation-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.summary-skeleton-line {
+  display: block;
+  height: 12px;
+  width: 100%;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    #1a2228 25%,
+    #232d35 37%,
+    #1a2228 63%
+  );
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+.summary-skeleton-line.short {
+  width: 60%;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+.interpretation-loading-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: #69737b;
+}
+
+.loading-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2be98c;
+  animation: loading-dot-pulse 1.2s ease infinite;
+}
+
+@keyframes loading-dot-pulse {
+  0%, 100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
   }
 }
