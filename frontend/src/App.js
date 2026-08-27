@@ -167,6 +167,7 @@ export default function App() {
 
   const [mode, setMode] = useState("single");
   const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -188,6 +189,7 @@ export default function App() {
     setRisk(null);
     setMc(null);
     setHistory([]);
+    setHistoryLoading(false);
     setSummary("");
     setPortfolio(null);
 
@@ -208,6 +210,7 @@ export default function App() {
       .get(`${API}/stock/${symbol}/montecarlo`)
       .then((res) => setMc(res.data));
 
+    setHistoryLoading(true);
     const historyPromise = axios
       .get(`${API}/stock/${symbol}/history`)
       .then((res) => {
@@ -216,6 +219,9 @@ export default function App() {
             ? res.data.slice(-60)
             : []
         );
+      })
+      .finally(() => {
+        setHistoryLoading(false);
       });
 
     // Slow AI summary call runs independently and never blocks
@@ -316,14 +322,6 @@ export default function App() {
 
   function switchMode(nextMode) {
     setMode(nextMode);
-
-    setInfo(null);
-    setRisk(null);
-    setMc(null);
-    setHistory([]);
-    setSummary("");
-    setSummaryLoading(false);
-    setPortfolio(null);
     setError("");
   }
 
@@ -447,6 +445,7 @@ export default function App() {
     risk ||
     mc ||
     history.length > 0 ||
+    historyLoading ||
     summaryLoading ||
     Boolean(summary);
 
@@ -818,6 +817,7 @@ export default function App() {
                 {/* HISTORY + INTERPRETATION */}
 
                 {(history.length > 0 ||
+                  historyLoading ||
                   summaryLoading ||
                   summary) && (
                   <section className="two-column-section">
