@@ -183,6 +183,7 @@ export default function App() {
     const symbol = ticker.trim().toUpperCase();
 
     setError("");
+    setTicker(symbol);
     setInfo(null);
     setRisk(null);
     setMc(null);
@@ -193,9 +194,8 @@ export default function App() {
     setLoading(true);
     setSummaryLoading(true);
 
-    // Fast calls resolve independently so each section can render
-    // as soon as its own data is ready, instead of waiting on the
-    // slowest endpoint (the AI summary).
+    // Core market-data calls resolve independently so each
+    // section can render as soon as its own endpoint returns.
     const infoPromise = axios
       .get(`${API}/stock/${symbol}`)
       .then((res) => setInfo(res.data));
@@ -212,19 +212,21 @@ export default function App() {
       .get(`${API}/stock/${symbol}/history`)
       .then((res) => {
         setHistory(
-          Array.isArray(res.data) ? res.data.slice(-60) : []
+          Array.isArray(res.data)
+            ? res.data.slice(-60)
+            : []
         );
       });
 
-    // Slow AI summary call is tracked separately and never blocks
-    // the rest of the page.
+    // Slow AI summary call runs independently and never blocks
+    // rendering of the rest of the stock analysis.
     axios
       .get(`${API}/stock/${symbol}/summary`)
       .then((res) => {
         setSummary(res.data?.summary || "");
       })
       .catch((err) => {
-        console.error(err);
+        console.error("Risk interpretation error:", err);
       })
       .finally(() => {
         setSummaryLoading(false);
@@ -237,8 +239,6 @@ export default function App() {
         mcPromise,
         historyPromise,
       ]);
-
-      setTicker(symbol);
     } catch (err) {
       console.error(err);
 
@@ -247,6 +247,8 @@ export default function App() {
           "Unable to retrieve this security. Check the ticker and try again."
       );
     } finally {
+      // This represents only the core market-data analysis.
+      // The AI summary has its own loading state.
       setLoading(false);
     }
   }
@@ -432,8 +434,21 @@ export default function App() {
         }))
       : [];
 
+  /*
+   * IMPORTANT:
+   * Results are now considered available when ANY part of
+   * the stock analysis is ready, including the AI summary.
+   *
+   * This prevents the whole page from being held back by
+   * one slow endpoint.
+   */
   const hasSingleResults =
-    info && risk && mc;
+    info ||
+    risk ||
+    mc ||
+    history.length > 0 ||
+    summaryLoading ||
+    Boolean(summary);
 
   return (
     <div className="app">
@@ -621,7 +636,16 @@ export default function App() {
               <ErrorBanner message={error} />
             )}
 
-            {loading && (
+            {/*
+             * The large loading screen now appears only when
+             * absolutely nothing from the stock analysis has
+             * arrived yet.
+             *
+             * Because summaryLoading starts immediately, the
+             * AI interpretation area can appear right away
+             * instead of this blocking the entire page.
+             */}
+            {loading && !hasSingleResults && (
               <LoadingState
                 title="Analyzing security"
                 description="Retrieving market data and calculating risk metrics."
@@ -632,220 +656,278 @@ export default function App() {
               <>
                 {/* STOCK HEADER */}
 
-                <section className="security-header">
-                  <div className="security-identity">
-                    <div className="security-avatar">
-                      {String(
-                        info.name || ticker
-                      )
-                        .charAt(0)
-                        .toUpperCase()}
-                    </div>
-
-                    <div>
-                      <div className="security-name">
-                        {info.name ||
-                          "Unknown Security"}
+                {info && (
+                  <section className="security-header">
+                    <div className="security-identity">
+                      <div className="security-avatar">
+                        {String(
+                          info.name || ticker
+                        )
+                          .charAt(0)
+                          .toUpperCase()}
                       </div>
 
-                      <div className="security-meta">
-                        <span>
-                          {ticker.toUpperCase()}
-                        </span>
+                      <div>
+                        <div className="security-name">
+                          {info.name ||
+                            "Unknown Security"}
+                        </div>
 
-                        <span className="meta-separator">
-                          ·
-                        </span>
+                        <div className="security-meta">
+                          <span>
+                            {ticker.toUpperCase()}
+                          </span>
 
-                        <span>
-                          {info.currency ||
-                            "USD"}
-                        </span>
+                          <span className="meta-separator">
+                            ·
+                          </span>
+
+                          <span>
+                            {info.currency ||
+                              "USD"}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="price-block">
-                    <span>
-                      Current price
-                    </span>
+                    <div className="price-block">
+                      <span>
+                        Current price
+                      </span>
 
-                    <strong>
-                      {formatCurrency(
-                        info.price,
-                        info.currency
-                      )}
-                    </strong>
-                  </div>
-                </section>
+                      <strong>
+                        {formatCurrency(
+                          info.price,
+                          info.currency
+                        )}
+                      </strong>
+                    </div>
+                  </section>
+                )}
 
                 {/* RISK OVERVIEW */}
 
-                <section className="content-section">
-                  <SectionHeading
-                    eyebrow="RISK OVERVIEW"
-                    title="Key metrics"
-                    description="Derived from one year of historical price data."
-                  />
-
-                  <div className="metric-grid">
-                    <MetricCard
-                      label="Daily volatility"
-                      value={`${formatNumber(
-                        risk.volatility,
-                        3
-                      )}%`}
-                      caption={
-                        riskTone(
-                          risk.volatility
-                        ) === "positive"
-                          ? "Lower risk"
-                          : riskTone(
-                              risk.volatility
-                            ) === "warning"
-                          ? "Moderate"
-                          : "Higher risk"
-                      }
-                      tone={riskTone(
-                        risk.volatility
-                      )}
+                {(risk || mc) && (
+                  <section className="content-section">
+                    <SectionHeading
+                      eyebrow="RISK OVERVIEW"
+                      title="Key metrics"
+                      description="Derived from one year of historical price data."
                     />
 
-                    <MetricCard
-                      label="Sharpe ratio"
-                      value={formatNumber(
-                        risk.sharpe_ratio,
-                        3
-                      )}
-                      caption={
-                        risk.sharpe_ratio > 1
-                          ? "Strong"
-                          : risk.sharpe_ratio > 0
-                          ? "Positive"
-                          : "Weak"
-                      }
-                      tone={sharpeTone(
-                        risk.sharpe_ratio
-                      )}
-                    />
+                    <div className="metric-grid">
+                      <MetricCard
+                        label="Daily volatility"
+                        value={
+                          risk
+                            ? `${formatNumber(
+                                risk.volatility,
+                                3
+                              )}%`
+                            : "Calculating"
+                        }
+                        caption={
+                          risk
+                            ? riskTone(
+                                risk.volatility
+                              ) === "positive"
+                              ? "Lower risk"
+                              : riskTone(
+                                  risk.volatility
+                                ) === "warning"
+                              ? "Moderate"
+                              : "Higher risk"
+                            : "Calculating"
+                        }
+                        tone={
+                          risk
+                            ? riskTone(
+                                risk.volatility
+                              )
+                            : "neutral"
+                        }
+                      />
 
-                    <MetricCard
-                      label="Value at Risk"
-                      value={`${formatNumber(
-                        risk.var_95,
-                        3
-                      )}%`}
-                      caption="95% confidence"
-                      tone="negative"
-                    />
+                      <MetricCard
+                        label="Sharpe ratio"
+                        value={
+                          risk
+                            ? formatNumber(
+                                risk.sharpe_ratio,
+                                3
+                              )
+                            : "Calculating"
+                        }
+                        caption={
+                          risk
+                            ? risk.sharpe_ratio > 1
+                              ? "Strong"
+                              : risk.sharpe_ratio > 0
+                              ? "Positive"
+                              : "Weak"
+                            : "Calculating"
+                        }
+                        tone={
+                          risk
+                            ? sharpeTone(
+                                risk.sharpe_ratio
+                              )
+                            : "neutral"
+                        }
+                      />
 
-                    <MetricCard
-                      label="Expected price"
-                      value={formatCurrency(
-                        mc.expected_price,
-                        info.currency
-                      )}
-                      caption="1 year simulation"
-                      tone="positive"
-                    />
-                  </div>
-                </section>
+                      <MetricCard
+                        label="Value at Risk"
+                        value={
+                          risk
+                            ? `${formatNumber(
+                                risk.var_95,
+                                3
+                              )}%`
+                            : "Calculating"
+                        }
+                        caption="95% confidence"
+                        tone={
+                          risk
+                            ? "negative"
+                            : "neutral"
+                        }
+                      />
+
+                      <MetricCard
+                        label="Expected price"
+                        value={
+                          mc
+                            ? formatCurrency(
+                                mc.expected_price,
+                                info?.currency || "USD"
+                              )
+                            : "Calculating"
+                        }
+                        caption="1 year simulation"
+                        tone={
+                          mc
+                            ? "positive"
+                            : "neutral"
+                        }
+                      />
+                    </div>
+                  </section>
+                )}
 
                 {/* HISTORY + INTERPRETATION */}
 
-                <section className="two-column-section">
-                  <div className="panel chart-panel">
-                    <SectionHeading
-                      eyebrow="PRICE HISTORY"
-                      title="Recent performance"
-                      description="Last 60 trading sessions"
-                      compact
-                    />
+                {(history.length > 0 ||
+                  summaryLoading ||
+                  summary) && (
+                  <section className="two-column-section">
+                    <div className="panel chart-panel">
+                      <SectionHeading
+                        eyebrow="PRICE HISTORY"
+                        title="Recent performance"
+                        description="Last 60 trading sessions"
+                        compact
+                      />
 
-                    <div className="chart-container">
-                      <ResponsiveContainer
-                        width="100%"
-                        height={330}
-                      >
-                        <LineChart
-                          data={history}
-                          margin={{
-                            top: 10,
-                            right: 8,
-                            left: -18,
-                            bottom: 0,
-                          }}
-                        >
-                          <XAxis
-                            dataKey="Date"
-                            hide
-                          />
+                      <div className="chart-container">
+                        {history.length > 0 ? (
+                          <ResponsiveContainer
+                            width="100%"
+                            height={330}
+                          >
+                            <LineChart
+                              data={history}
+                              margin={{
+                                top: 10,
+                                right: 8,
+                                left: -18,
+                                bottom: 0,
+                              }}
+                            >
+                              <XAxis
+                                dataKey="Date"
+                                hide
+                              />
 
-                          <YAxis
-                            domain={[
-                              "auto",
-                              "auto",
-                            ]}
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{
-                              fill: "#56616a",
-                              fontSize: 10,
-                            }}
-                            width={55}
-                          />
+                              <YAxis
+                                domain={[
+                                  "auto",
+                                  "auto",
+                                ]}
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{
+                                  fill: "#56616a",
+                                  fontSize: 10,
+                                }}
+                                width={55}
+                              />
 
-                          <Tooltip
-                            cursor={{
-                              stroke:
-                                "rgba(255,255,255,.08)",
-                            }}
-                            contentStyle={{
-                              background:
-                                "#10151a",
-                              border:
-                                "1px solid #263038",
-                              borderRadius:
-                                "8px",
-                              color:
-                                "#f0f4f2",
-                              boxShadow:
-                                "0 10px 30px rgba(0,0,0,.35)",
-                            }}
-                            labelStyle={{
-                              color: "#69737b",
-                              marginBottom:
-                                "5px",
-                            }}
-                            formatter={(value) => [
-                              formatCurrency(
-                                value,
-                                info.currency
-                              ),
-                              "Close",
-                            ]}
-                          />
+                              <Tooltip
+                                cursor={{
+                                  stroke:
+                                    "rgba(255,255,255,.08)",
+                                }}
+                                contentStyle={{
+                                  background:
+                                    "#10151a",
+                                  border:
+                                    "1px solid #263038",
+                                  borderRadius:
+                                    "8px",
+                                  color:
+                                    "#f0f4f2",
+                                  boxShadow:
+                                    "0 10px 30px rgba(0,0,0,.35)",
+                                }}
+                                labelStyle={{
+                                  color: "#69737b",
+                                  marginBottom:
+                                    "5px",
+                                }}
+                                formatter={(value) => [
+                                  formatCurrency(
+                                    value,
+                                    info?.currency || "USD"
+                                  ),
+                                  "Close",
+                                ]}
+                              />
 
-                          <Line
-                            type="monotone"
-                            dataKey="Close"
-                            stroke="#2be98c"
-                            strokeWidth={2}
-                            dot={false}
-                            activeDot={{
-                              r: 4,
-                              stroke:
-                                "#2be98c",
-                              strokeWidth: 2,
-                              fill: "#0b0f12",
+                              <Line
+                                type="monotone"
+                                dataKey="Close"
+                                stroke="#2be98c"
+                                strokeWidth={2}
+                                dot={false}
+                                activeDot={{
+                                  r: 4,
+                                  stroke:
+                                    "#2be98c",
+                                  strokeWidth: 2,
+                                  fill: "#0b0f12",
+                                }}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        ) : (
+                          <div
+                            style={{
+                              minHeight: 330,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "#56616a",
+                              fontSize: "12px",
+                              letterSpacing: "0.02em",
                             }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
+                          >
+                            Loading price history…
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
 
-                  {(summary || summaryLoading) && (
                     <div className="panel interpretation-panel">
                       <div className="interpretation-top">
                         <div className="interpretation-icon">
@@ -874,7 +956,7 @@ export default function App() {
                             Generating risk interpretation
                           </div>
                         </div>
-                      ) : (
+                      ) : summary ? (
                         <>
                           <p className="interpretation-copy">
                             {summary}
@@ -886,182 +968,189 @@ export default function App() {
                             risk metrics
                           </div>
                         </>
+                      ) : (
+                        <div className="interpretation-loading-note">
+                          <span className="loading-dot" />
+                          Risk interpretation unavailable right now.
+                        </div>
                       )}
                     </div>
-                  )}
-                </section>
+                  </section>
+                )}
 
                 {/* MONTE CARLO */}
 
-                <section className="content-section">
-                  <SectionHeading
-                    eyebrow="MONTE CARLO SIMULATION"
-                    title="Potential price scenarios"
-                    description="Illustrative outcomes based on historical return behaviour."
-                    rightText="1 YEAR"
-                  />
+                {mc && (
+                  <section className="content-section">
+                    <SectionHeading
+                      eyebrow="MONTE CARLO SIMULATION"
+                      title="Potential price scenarios"
+                      description="Illustrative outcomes based on historical return behaviour."
+                      rightText="1 YEAR"
+                    />
 
-                  <div className="panel scenario-panel">
-                    <div className="scenario-grid">
-                      <Scenario
-                        label="Worst case"
-                        value={
-                          mc.worst_case
-                        }
-                        tone="negative"
-                        currency={
-                          info.currency
-                        }
-                      />
+                    <div className="panel scenario-panel">
+                      <div className="scenario-grid">
+                        <Scenario
+                          label="Worst case"
+                          value={
+                            mc.worst_case
+                          }
+                          tone="negative"
+                          currency={
+                            info?.currency || "USD"
+                          }
+                        />
 
-                      <Scenario
-                        label="VaR 95%"
-                        value={mc.var_95}
-                        tone="negative"
-                        currency={
-                          info.currency
-                        }
-                      />
+                        <Scenario
+                          label="VaR 95%"
+                          value={mc.var_95}
+                          tone="negative"
+                          currency={
+                            info?.currency || "USD"
+                          }
+                        />
 
-                      <Scenario
-                        label="Expected"
-                        value={
-                          mc.expected_price
-                        }
-                        tone="neutral"
-                        currency={
-                          info.currency
-                        }
-                      />
+                        <Scenario
+                          label="Expected"
+                          value={
+                            mc.expected_price
+                          }
+                          tone="neutral"
+                          currency={
+                            info?.currency || "USD"
+                          }
+                        />
 
-                      <Scenario
-                        label="Current"
-                        value={
-                          mc.current_price
-                        }
-                        tone="neutral"
-                        currency={
-                          info.currency
-                        }
-                      />
+                        <Scenario
+                          label="Current"
+                          value={
+                            mc.current_price
+                          }
+                          tone="neutral"
+                          currency={
+                            info?.currency || "USD"
+                          }
+                        />
 
-                      <Scenario
-                        label="Best case"
-                        value={
-                          mc.best_case
-                        }
-                        tone="positive"
-                        currency={
-                          info.currency
-                        }
-                      />
-                    </div>
+                        <Scenario
+                          label="Best case"
+                          value={
+                            mc.best_case
+                          }
+                          tone="positive"
+                          currency={
+                            info?.currency || "USD"
+                          }
+                        />
+                      </div>
 
-                    <div className="scenario-chart">
-                      <ResponsiveContainer
-                        width="100%"
-                        height={290}
-                      >
-                        <LineChart
-                          data={[
-                            {
-                              label: "Worst",
-                              price:
-                                mc.worst_case,
-                            },
-                            {
-                              label: "VaR 95%",
-                              price:
-                                mc.var_95,
-                            },
-                            {
-                              label: "Expected",
-                              price:
-                                mc.expected_price,
-                            },
-                            {
-                              label: "Current",
-                              price:
-                                mc.current_price,
-                            },
-                            {
-                              label: "Best",
-                              price:
-                                mc.best_case,
-                            },
-                          ]}
-                          margin={{
-                            top: 10,
-                            right: 8,
-                            left: -14,
-                            bottom: 0,
-                          }}
+                      <div className="scenario-chart">
+                        <ResponsiveContainer
+                          width="100%"
+                          height={290}
                         >
-                          <XAxis
-                            dataKey="label"
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{
-                              fill: "#56616a",
-                              fontSize: 10,
-                            }}
-                          />
-
-                          <YAxis
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{
-                              fill: "#56616a",
-                              fontSize: 10,
-                            }}
-                            width={58}
-                          />
-
-                          <Tooltip
-                            contentStyle={{
-                              background:
-                                "#10151a",
-                              border:
-                                "1px solid #263038",
-                              borderRadius:
-                                "8px",
-                            }}
-                            formatter={(value) => [
-                              formatCurrency(
-                                value,
-                                info.currency
-                              ),
-                              "Price",
+                          <LineChart
+                            data={[
+                              {
+                                label: "Worst",
+                                price:
+                                  mc.worst_case,
+                              },
+                              {
+                                label: "VaR 95%",
+                                price:
+                                  mc.var_95,
+                              },
+                              {
+                                label: "Expected",
+                                price:
+                                  mc.expected_price,
+                              },
+                              {
+                                label: "Current",
+                                price:
+                                  mc.current_price,
+                              },
+                              {
+                                label: "Best",
+                                price:
+                                  mc.best_case,
+                              },
                             ]}
-                          />
-
-                          <ReferenceLine
-                            y={
-                              mc.current_price
-                            }
-                            stroke="#39434b"
-                            strokeDasharray="5 5"
-                          />
-
-                          <Line
-                            type="monotone"
-                            dataKey="price"
-                            stroke="#e5c85b"
-                            strokeWidth={2}
-                            dot={{
-                              r: 4,
-                              fill: "#e5c85b",
-                              strokeWidth: 0,
+                            margin={{
+                              top: 10,
+                              right: 8,
+                              left: -14,
+                              bottom: 0,
                             }}
-                            activeDot={{
-                              r: 6,
-                            }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
+                          >
+                            <XAxis
+                              dataKey="label"
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{
+                                fill: "#56616a",
+                                fontSize: 10,
+                              }}
+                            />
+
+                            <YAxis
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{
+                                fill: "#56616a",
+                                fontSize: 10,
+                              }}
+                              width={58}
+                            />
+
+                            <Tooltip
+                              contentStyle={{
+                                background:
+                                  "#10151a",
+                                border:
+                                  "1px solid #263038",
+                                borderRadius:
+                                  "8px",
+                              }}
+                              formatter={(value) => [
+                                formatCurrency(
+                                  value,
+                                  info?.currency || "USD"
+                                ),
+                                "Price",
+                              ]}
+                            />
+
+                            <ReferenceLine
+                              y={
+                                mc.current_price
+                              }
+                              stroke="#39434b"
+                              strokeDasharray="5 5"
+                            />
+
+                            <Line
+                              type="monotone"
+                              dataKey="price"
+                              stroke="#e5c85b"
+                              strokeWidth={2}
+                              dot={{
+                                r: 4,
+                                fill: "#e5c85b",
+                                strokeWidth: 0,
+                              }}
+                              activeDot={{
+                                r: 6,
+                              }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
-                  </div>
-                </section>
+                  </section>
+                )}
               </>
             )}
           </main>
