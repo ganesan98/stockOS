@@ -1,2038 +1,2424 @@
-import { useState } from "react";
-import axios from "axios";
-import TickerAutocomplete from "./TickerAutocomplete";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-  ScatterChart,
-  Scatter,
-  CartesianGrid,
-  ZAxis,
-} from "recharts";
-import "./App.css";
-
-const API =
-  process.env.REACT_APP_API_URL ||
-  "https://portfolioos-backend-1qdb.onrender.com";
-
 /* =========================================================
-   ICONS
+   PORTFOLIOOS — SENIOR FINTECH UI
    ========================================================= */
 
-const SearchIcon = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <circle cx="11" cy="11" r="7" />
-    <path d="m20 20-3.5-3.5" />
-  </svg>
-);
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
-const ArrowRight = () => (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="M5 12h14" />
-    <path d="m13 6 6 6-6 6" />
-  </svg>
-);
+:root {
+  --bg: #07090b;
 
-const PlusIcon = () => (
-  <svg
-    width="15"
-    height="15"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    aria-hidden="true"
-  >
-    <path d="M12 5v14" />
-    <path d="M5 12h14" />
-  </svg>
-);
+  --panel: #0d1114;
+  --panel-2: #10151a;
+  --panel-3: #13191e;
+  --input: #090d10;
 
-const TrashIcon = () => (
-  <svg
-    width="15"
-    height="15"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    aria-hidden="true"
-  >
-    <path d="M4 7h16" />
-    <path d="M9 7V4h6v3" />
-    <path d="M7 7l1 13h8l1-13" />
-    <path d="M10 11v5" />
-    <path d="M14 11v5" />
-  </svg>
-);
+  --line: #1d252c;
+  --line-strong: #2b353e;
 
-const ChartIcon = () => (
-  <svg
-    width="17"
-    height="17"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.7"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="M4 19V5" />
-    <path d="M4 19h16" />
-    <path d="m7 15 3-4 3 2 5-6" />
-  </svg>
-);
+  --text: #f1f5f3;
+  --text-soft: #bdc5ca;
+  --muted: #7c868e;
+  --muted-dark: #505a63;
 
-const PortfolioIcon = () => (
-  <svg
-    width="17"
-    height="17"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.7"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <rect x="3" y="6" width="18" height="14" rx="2" />
-    <path d="M8 6V4h8v2" />
-    <path d="M12 12v4" />
-    <path d="M10 14h4" />
-  </svg>
-);
+  --green: #2be98c;
+  --green-dim: #16a866;
 
-const ShieldIcon = () => (
-  <svg
-    width="17"
-    height="17"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.7"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="M12 3 20 7v5c0 4.8-3.2 7.8-8 9-4.8-1.2-8-4.2-8-9V7z" />
-    <path d="m9 12 2 2 4-4" />
-  </svg>
-);
+  --red: #ff6666;
+  --yellow: #e7c85a;
+
+  --radius: 10px;
+  --radius-lg: 13px;
+
+  --shadow:
+    0 18px 40px rgba(0, 0, 0, 0.18);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+
+  background: var(--bg);
+  color: var(--text);
+
+  font-family:
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid rgba(43, 233, 140, 0.45);
+  outline-offset: 2px;
+}
 
 /* =========================================================
    APP
    ========================================================= */
 
-export default function App() {
-  const [ticker, setTicker] = useState("");
-  const [info, setInfo] = useState(null);
-  const [risk, setRisk] = useState(null);
-  const [mc, setMc] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [summary, setSummary] = useState("");
+.app {
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
 
-  const [holdings, setHoldings] = useState([
-    { ticker: "", amount: "" },
-  ]);
+  background:
+    radial-gradient(
+      circle at 7% -12%,
+      rgba(43, 233, 140, 0.035),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 93% 22%,
+      rgba(83, 140, 255, 0.018),
+      transparent 24%
+    ),
+    var(--bg);
+}
 
-  const [portfolio, setPortfolio] = useState(null);
+.ambient {
+  position: fixed;
 
-  const [mode, setMode] = useState("single");
-  const [loading, setLoading] = useState(false);
-  const [portfolioLoading, setPortfolioLoading] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [summaryLoading, setSummaryLoading] = useState(false);
-  const [error, setError] = useState("");
+  width: 400px;
+  height: 400px;
 
-  /* -------------------------------------------------------
-     Single stock analysis
-     ------------------------------------------------------- */
+  border-radius: 50%;
 
-  async function analyze() {
-    if (!ticker.trim()) {
-      setError("Enter a ticker symbol to continue.");
-      return;
-    }
+  pointer-events: none;
 
-    const symbol = ticker.trim().toUpperCase();
+  filter: blur(150px);
 
-    setError("");
-    setTicker(symbol);
-    setInfo(null);
-    setRisk(null);
-    setMc(null);
-    setHistory([]);
-    setHistoryLoading(false);
-    setSummary("");
-    setPortfolio(null);
+  opacity: 0.015;
 
-    setLoading(true);
-    setSummaryLoading(true);
+  z-index: 0;
+}
 
-    // Core market-data calls resolve independently so each
-    // section can render as soon as its own endpoint returns.
-    const infoPromise = axios
-      .get(`${API}/stock/${symbol}`)
-      .then((res) => setInfo(res.data));
+.ambient-one {
+  left: -260px;
+  top: -260px;
 
-    const riskPromise = axios
-      .get(`${API}/stock/${symbol}/risk`)
-      .then((res) => setRisk(res.data));
+  background: var(--green);
+}
 
-    const mcPromise = axios
-      .get(`${API}/stock/${symbol}/montecarlo`)
-      .then((res) => setMc(res.data));
+.ambient-two {
+  right: -300px;
+  top: 45%;
 
-    setHistoryLoading(true);
-    const historyPromise = axios
-      .get(`${API}/stock/${symbol}/history`)
-      .then((res) => {
-        setHistory(
-          Array.isArray(res.data)
-            ? res.data.slice(-60)
-            : []
-        );
-      })
-      .finally(() => {
-        setHistoryLoading(false);
-      });
+  background: #4777ff;
+}
 
-    // Slow AI summary call runs independently and never blocks
-    // rendering of the rest of the stock analysis.
-    axios
-      .get(`${API}/stock/${symbol}/summary`)
-      .then((res) => {
-        setSummary(res.data?.summary || "");
-      })
-      .catch((err) => {
-        console.error("Risk interpretation error:", err);
-      })
-      .finally(() => {
-        setSummaryLoading(false);
-      });
+.app-frame {
+  position: relative;
+  z-index: 1;
 
-    try {
-      await Promise.all([
-        infoPromise,
-        riskPromise,
-        mcPromise,
-        historyPromise,
-      ]);
-    } catch (err) {
-      console.error(err);
+  width: min(1160px, calc(100% - 48px));
 
-      setError(
-        err?.response?.data?.detail ||
-          "Unable to retrieve this security. Check the ticker and try again."
-      );
-    } finally {
-      // This represents only the core market-data analysis.
-      // The AI summary has its own loading state.
-      setLoading(false);
-    }
-  }
+  margin: 0 auto;
 
-  /* -------------------------------------------------------
-     Portfolio analysis
-     ------------------------------------------------------- */
-
-  async function analyzePortfolio() {
-    setPortfolioLoading(true);
-    setError("");
-
-    setPortfolio(null);
-
-    try {
-      const validHoldings = holdings.filter(
-        (holding) =>
-          holding.ticker.trim() &&
-          holding.amount !== "" &&
-          Number(holding.amount) > 0
-      );
-
-      if (!validHoldings.length) {
-        setError(
-          "Add at least one stock and a valid investment amount."
-        );
-        setPortfolioLoading(false);
-        return;
-      }
-
-      const payload = {
-        holdings: validHoldings.map((holding) => ({
-          ticker: holding.ticker.trim().toUpperCase(),
-          amount: Number(holding.amount),
-        })),
-      };
-
-      const response = await axios.post(
-        `${API}/portfolio/risk`,
-        payload
-      );
-
-      setPortfolio(response.data);
-    } catch (err) {
-      console.error(err);
-
-      setError(
-        err?.response?.data?.detail ||
-          "Unable to analyze this portfolio. Check the holdings and try again."
-      );
-    } finally {
-      setPortfolioLoading(false);
-    }
-  }
-
-  /* -------------------------------------------------------
-     UI helpers
-     ------------------------------------------------------- */
-
-  function switchMode(nextMode) {
-    setMode(nextMode);
-    setError("");
-  }
-
-  function updateHolding(index, field, value) {
-    setHoldings((current) =>
-      current.map((holding, currentIndex) =>
-        currentIndex === index
-          ? {
-              ...holding,
-              [field]: value,
-            }
-          : holding
-      )
-    );
-  }
-
-  function addHolding() {
-    setHoldings((current) => [
-      ...current,
-      {
-        ticker: "",
-        amount: "",
-      },
-    ]);
-  }
-
-  function removeHolding(index) {
-    if (holdings.length === 1) return;
-
-    setHoldings((current) =>
-      current.filter(
-        (_, currentIndex) => currentIndex !== index
-      )
-    );
-  }
-
-  function formatNumber(value, decimals = 2) {
-    if (
-      value === null ||
-      value === undefined ||
-      value === "" ||
-      Number.isNaN(Number(value))
-    ) {
-      return "—";
-    }
-
-    return Number(value).toLocaleString("en-IN", {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    });
-  }
-
-  function formatCurrency(value, currency = "USD") {
-    if (
-      value === null ||
-      value === undefined ||
-      value === "" ||
-      Number.isNaN(Number(value))
-    ) {
-      return "—";
-    }
-
-    try {
-      return new Intl.NumberFormat("en-IN", {
-        style: "currency",
-        currency: String(
-          currency || "USD"
-        ).toUpperCase(),
-        maximumFractionDigits: 2,
-      }).format(Number(value));
-    } catch {
-      return `${currency || "USD"} ${formatNumber(value)}`;
-    }
-  }
-
-  function riskTone(value) {
-    const numeric = Math.abs(Number(value));
-
-    if (numeric < 1) return "positive";
-    if (numeric < 2.5) return "warning";
-
-    return "negative";
-  }
-
-  function sharpeTone(value) {
-    const numeric = Number(value);
-
-    if (numeric > 1) return "positive";
-    if (numeric > 0) return "warning";
-
-    return "negative";
-  }
-
-  const riskReturnData =
-    Array.isArray(portfolio?.comparison)
-      ? portfolio.comparison.map((stock) => ({
-          ticker: stock.ticker,
-          return1y: Number(stock.return_1y),
-          volatility: Number(stock.volatility),
-          sharpe: Number(stock.sharpe),
-          var95: Number(stock.var_95),
-          score: Number(stock.score),
-          weight: Number(
-            portfolio?.weights?.[
-              stock.ticker
-            ] || 0
-          ),
-        }))
-      : [];
-
-  /*
-   * IMPORTANT:
-   * Results are now considered available when ANY part of
-   * the stock analysis is ready, including the AI summary.
-   *
-   * This prevents the whole page from being held back by
-   * one slow endpoint.
-   */
-  const hasSingleResults =
-    info ||
-    risk ||
-    mc ||
-    history.length > 0 ||
-    historyLoading ||
-    summaryLoading ||
-    Boolean(summary);
-
-  return (
-    <div className="app">
-      <div className="ambient ambient-one" />
-      <div className="ambient ambient-two" />
-
-      <div className="app-frame">
-        {/* ===================================================
-            HEADER
-           =================================================== */}
-
-        <header className="header">
-          <div className="brand-group">
-            <div className="brand-logo">
-              <span />
-              <span />
-              <span />
-            </div>
-
-            <div>
-              <div className="brand-name">
-                PortfolioOS
-              </div>
-
-              <div className="brand-subtitle">
-                Stock &amp; portfolio risk analyzer
-              </div>
-            </div>
-          </div>
-
-          <div className="connection-status">
-            <span className="connection-dot" />
-            Market data connected
-          </div>
-        </header>
-
-        {/* ===================================================
-            NAVIGATION
-           =================================================== */}
-
-        <nav className="main-nav">
-          <button
-            className={`nav-item ${
-              mode === "single"
-                ? "active"
-                : ""
-            }`}
-            onClick={() =>
-              switchMode("single")
-            }
-          >
-            <ChartIcon />
-            <span>Stocks</span>
-          </button>
-
-          <button
-            className={`nav-item ${
-              mode === "portfolio"
-                ? "active"
-                : ""
-            }`}
-            onClick={() =>
-              switchMode("portfolio")
-            }
-          >
-            <PortfolioIcon />
-            <span>Portfolio</span>
-          </button>
-        </nav>
-
-        {/* ===================================================
-            SINGLE STOCK
-           =================================================== */}
-
-        {mode === "single" && (
-          <main>
-            <section className="page-intro">
-              <div>
-                <span className="section-kicker">
-                  STOCK ANALYSIS
-                </span>
-
-                <h1>
-                  Understand the risk behind a stock.
-                </h1>
-
-                <p>
-                  Search a security to review
-                  historical performance, risk
-                  metrics and simulated price
-                  scenarios.
-                </p>
-              </div>
-            </section>
-
-            <section className="search-panel">
-              <label
-                className="input-label"
-                htmlFor="stock-search"
-              >
-                Security
-              </label>
-
-              <div className="search-row">
-                <div className="search-field">
-                  <span className="search-symbol">
-                    <SearchIcon />
-                  </span>
-
-                  <TickerAutocomplete
-                    inputId="stock-search"
-                    value={ticker}
-                    onChange={setTicker}
-                    onSelect={(suggestion) => {
-                      setTicker(suggestion.symbol);
-                    }}
-                    onEnter={() => {
-                      if (!loading) analyze();
-                    }}
-                    placeholder="AAPL, MSFT, TCS.NS, RELIANCE.NS"
-                  />
-                </div>
-
-                <button
-                  className="action-button"
-                  onClick={analyze}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <span className="button-spinner" />
-                      Analyzing
-                    </>
-                  ) : (
-                    <>
-                      Analyze
-                      <ArrowRight />
-                    </>
-                  )}
-                </button>
-              </div>
-
-              <div className="example-row">
-                <span>Try</span>
-
-                <button
-                  onClick={() => {
-                    setTicker("AAPL");
-                    setError("");
-                  }}
-                >
-                  AAPL
-                </button>
-
-                <button
-                  onClick={() => {
-                    setTicker("MSFT");
-                    setError("");
-                  }}
-                >
-                  MSFT
-                </button>
-
-                <button
-                  onClick={() => {
-                    setTicker("TCS.NS");
-                    setError("");
-                  }}
-                >
-                  TCS.NS
-                </button>
-
-                <button
-                  onClick={() => {
-                    setTicker("RELIANCE.NS");
-                    setError("");
-                  }}
-                >
-                  RELIANCE.NS
-                </button>
-              </div>
-            </section>
-
-            {error && (
-              <ErrorBanner message={error} />
-            )}
-
-            {/*
-             * The large loading screen now appears only when
-             * absolutely nothing from the stock analysis has
-             * arrived yet.
-             *
-             * Because summaryLoading starts immediately, the
-             * AI interpretation area can appear right away
-             * instead of this blocking the entire page.
-             */}
-            {loading && !hasSingleResults && (
-              <LoadingState
-                title="Analyzing security"
-                description="Retrieving market data and calculating risk metrics."
-              />
-            )}
-
-            {hasSingleResults && (
-              <>
-                {/* STOCK HEADER */}
-
-                {info && (
-                  <section className="security-header">
-                    <div className="security-identity">
-                      <div className="security-avatar">
-                        {String(
-                          info.name || ticker
-                        )
-                          .charAt(0)
-                          .toUpperCase()}
-                      </div>
-
-                      <div>
-                        <div className="security-name">
-                          {info.name ||
-                            "Unknown Security"}
-                        </div>
-
-                        <div className="security-meta">
-                          <span>
-                            {ticker.toUpperCase()}
-                          </span>
-
-                          <span className="meta-separator">
-                            ·
-                          </span>
-
-                          <span>
-                            {info.currency ||
-                              "USD"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="price-block">
-                      <span>
-                        Current price
-                      </span>
-
-                      <strong>
-                        {formatCurrency(
-                          info.price,
-                          info.currency
-                        )}
-                      </strong>
-                    </div>
-                  </section>
-                )}
-
-                {/* RISK OVERVIEW */}
-
-                {(risk || mc) && (
-                  <section className="content-section">
-                    <SectionHeading
-                      eyebrow="RISK OVERVIEW"
-                      title="Key metrics"
-                      description="Derived from one year of historical price data."
-                    />
-
-                    <div className="metric-grid">
-                      <MetricCard
-                        label="Daily volatility"
-                        value={
-                          risk
-                            ? `${formatNumber(
-                                risk.volatility,
-                                3
-                              )}%`
-                            : "Calculating"
-                        }
-                        caption={
-                          risk
-                            ? riskTone(
-                                risk.volatility
-                              ) === "positive"
-                              ? "Lower risk"
-                              : riskTone(
-                                  risk.volatility
-                                ) === "warning"
-                              ? "Moderate"
-                              : "Higher risk"
-                            : "Calculating"
-                        }
-                        tone={
-                          risk
-                            ? riskTone(
-                                risk.volatility
-                              )
-                            : "neutral"
-                        }
-                      />
-
-                      <MetricCard
-                        label="Sharpe ratio"
-                        value={
-                          risk
-                            ? formatNumber(
-                                risk.sharpe_ratio,
-                                3
-                              )
-                            : "Calculating"
-                        }
-                        caption={
-                          risk
-                            ? risk.sharpe_ratio > 1
-                              ? "Strong"
-                              : risk.sharpe_ratio > 0
-                              ? "Positive"
-                              : "Weak"
-                            : "Calculating"
-                        }
-                        tone={
-                          risk
-                            ? sharpeTone(
-                                risk.sharpe_ratio
-                              )
-                            : "neutral"
-                        }
-                      />
-
-                      <MetricCard
-                        label="Value at Risk"
-                        value={
-                          risk
-                            ? `${formatNumber(
-                                risk.var_95,
-                                3
-                              )}%`
-                            : "Calculating"
-                        }
-                        caption="95% confidence"
-                        tone={
-                          risk
-                            ? "negative"
-                            : "neutral"
-                        }
-                      />
-
-                      <MetricCard
-                        label="Expected price"
-                        value={
-                          mc
-                            ? formatCurrency(
-                                mc.expected_price,
-                                info?.currency || "USD"
-                              )
-                            : "Calculating"
-                        }
-                        caption="1 year simulation"
-                        tone={
-                          mc
-                            ? "positive"
-                            : "neutral"
-                        }
-                      />
-                    </div>
-                  </section>
-                )}
-
-                {/* HISTORY + INTERPRETATION */}
-
-                {(history.length > 0 ||
-                  historyLoading ||
-                  summaryLoading ||
-                  summary) && (
-                  <section className="two-column-section">
-                    <div className="panel chart-panel">
-                      <SectionHeading
-                        eyebrow="PRICE HISTORY"
-                        title="Recent performance"
-                        description="Last 60 trading sessions"
-                        compact
-                      />
-
-                      <div className="chart-container">
-                        {history.length > 0 ? (
-                          <ResponsiveContainer
-                            width="100%"
-                            height={330}
-                          >
-                            <LineChart
-                              data={history}
-                              margin={{
-                                top: 10,
-                                right: 8,
-                                left: -18,
-                                bottom: 0,
-                              }}
-                            >
-                              <XAxis
-                                dataKey="Date"
-                                hide
-                              />
-
-                              <YAxis
-                                domain={[
-                                  "auto",
-                                  "auto",
-                                ]}
-                                axisLine={false}
-                                tickLine={false}
-                                tick={{
-                                  fill: "#56616a",
-                                  fontSize: 10,
-                                }}
-                                width={55}
-                              />
-
-                              <Tooltip
-                                cursor={{
-                                  stroke:
-                                    "rgba(255,255,255,.08)",
-                                }}
-                                contentStyle={{
-                                  background:
-                                    "#10151a",
-                                  border:
-                                    "1px solid #263038",
-                                  borderRadius:
-                                    "8px",
-                                  color:
-                                    "#f0f4f2",
-                                  boxShadow:
-                                    "0 10px 30px rgba(0,0,0,.35)",
-                                }}
-                                labelStyle={{
-                                  color: "#69737b",
-                                  marginBottom:
-                                    "5px",
-                                }}
-                                formatter={(value) => [
-                                  formatCurrency(
-                                    value,
-                                    info?.currency || "USD"
-                                  ),
-                                  "Close",
-                                ]}
-                              />
-
-                              <Line
-                                type="monotone"
-                                dataKey="Close"
-                                stroke="#2be98c"
-                                strokeWidth={2}
-                                dot={false}
-                                activeDot={{
-                                  r: 4,
-                                  stroke:
-                                    "#2be98c",
-                                  strokeWidth: 2,
-                                  fill: "#0b0f12",
-                                }}
-                              />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        ) : (
-                          <div
-                            style={{
-                              minHeight: 330,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              color: "#56616a",
-                              fontSize: "12px",
-                              letterSpacing: "0.02em",
-                            }}
-                          >
-                            Loading price history…
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="panel interpretation-panel">
-                      <div className="interpretation-top">
-                        <div className="interpretation-icon">
-                          <ShieldIcon />
-                        </div>
-
-                        <div>
-                          <span className="panel-kicker">
-                            RISK INTERPRETATION
-                          </span>
-
-                          <h3>
-                            Putting the numbers in context
-                          </h3>
-                        </div>
-                      </div>
-
-                      {summaryLoading ? (
-                        <div className="interpretation-loading">
-                          <span className="summary-skeleton-line" />
-                          <span className="summary-skeleton-line" />
-                          <span className="summary-skeleton-line short" />
-
-                          <div className="interpretation-loading-note">
-                            <span className="loading-dot" />
-                            Generating risk interpretation
-                          </div>
-                        </div>
-                      ) : summary ? (
-                        <>
-                          <p className="interpretation-copy">
-                            {summary}
-                          </p>
-
-                          <div className="interpretation-source">
-                            <span className="source-dot" />
-                            Generated from the calculated
-                            risk metrics
-                          </div>
-                        </>
-                      ) : (
-                        <div className="interpretation-loading-note">
-                          <span className="loading-dot" />
-                          Risk interpretation unavailable right now.
-                        </div>
-                      )}
-                    </div>
-                  </section>
-                )}
-
-                {/* MONTE CARLO */}
-
-                {mc && (
-                  <section className="content-section">
-                    <SectionHeading
-                      eyebrow="MONTE CARLO SIMULATION"
-                      title="Potential price scenarios"
-                      description="Illustrative outcomes based on historical return behaviour."
-                      rightText="1 YEAR"
-                    />
-
-                    <div className="panel scenario-panel">
-                      <div className="scenario-grid">
-                        <Scenario
-                          label="Worst case"
-                          value={
-                            mc.worst_case
-                          }
-                          tone="negative"
-                          currency={
-                            info?.currency || "USD"
-                          }
-                        />
-
-                        <Scenario
-                          label="VaR 95%"
-                          value={mc.var_95}
-                          tone="negative"
-                          currency={
-                            info?.currency || "USD"
-                          }
-                        />
-
-                        <Scenario
-                          label="Expected"
-                          value={
-                            mc.expected_price
-                          }
-                          tone="neutral"
-                          currency={
-                            info?.currency || "USD"
-                          }
-                        />
-
-                        <Scenario
-                          label="Current"
-                          value={
-                            mc.current_price
-                          }
-                          tone="neutral"
-                          currency={
-                            info?.currency || "USD"
-                          }
-                        />
-
-                        <Scenario
-                          label="Best case"
-                          value={
-                            mc.best_case
-                          }
-                          tone="positive"
-                          currency={
-                            info?.currency || "USD"
-                          }
-                        />
-                      </div>
-
-                      <div className="scenario-chart">
-                        <ResponsiveContainer
-                          width="100%"
-                          height={290}
-                        >
-                          <LineChart
-                            data={[
-                              {
-                                label: "Worst",
-                                price:
-                                  mc.worst_case,
-                              },
-                              {
-                                label: "VaR 95%",
-                                price:
-                                  mc.var_95,
-                              },
-                              {
-                                label: "Expected",
-                                price:
-                                  mc.expected_price,
-                              },
-                              {
-                                label: "Current",
-                                price:
-                                  mc.current_price,
-                              },
-                              {
-                                label: "Best",
-                                price:
-                                  mc.best_case,
-                              },
-                            ]}
-                            margin={{
-                              top: 10,
-                              right: 8,
-                              left: -14,
-                              bottom: 0,
-                            }}
-                          >
-                            <XAxis
-                              dataKey="label"
-                              axisLine={false}
-                              tickLine={false}
-                              tick={{
-                                fill: "#56616a",
-                                fontSize: 10,
-                              }}
-                            />
-
-                            <YAxis
-                              axisLine={false}
-                              tickLine={false}
-                              tick={{
-                                fill: "#56616a",
-                                fontSize: 10,
-                              }}
-                              width={58}
-                            />
-
-                            <Tooltip
-                              contentStyle={{
-                                background:
-                                  "#10151a",
-                                border:
-                                  "1px solid #263038",
-                                borderRadius:
-                                  "8px",
-                              }}
-                              formatter={(value) => [
-                                formatCurrency(
-                                  value,
-                                  info?.currency || "USD"
-                                ),
-                                "Price",
-                              ]}
-                            />
-
-                            <ReferenceLine
-                              y={
-                                mc.current_price
-                              }
-                              stroke="#39434b"
-                              strokeDasharray="5 5"
-                            />
-
-                            <Line
-                              type="monotone"
-                              dataKey="price"
-                              stroke="#e5c85b"
-                              strokeWidth={2}
-                              dot={{
-                                r: 4,
-                                fill: "#e5c85b",
-                                strokeWidth: 0,
-                              }}
-                              activeDot={{
-                                r: 6,
-                              }}
-                            />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  </section>
-                )}
-              </>
-            )}
-          </main>
-        )}
-
-        {/* ===================================================
-            PORTFOLIO
-           =================================================== */}
-
-        {mode === "portfolio" && (
-          <main>
-            <section className="page-intro">
-              <div>
-                <span className="section-kicker">
-                  PORTFOLIO ANALYSIS
-                </span>
-
-                <h1>
-                  Build a portfolio and compare the risk.
-                </h1>
-
-                <p>
-                  Add your positions to understand
-                  portfolio-level risk and see how
-                  each holding compares on a
-                  risk-adjusted basis.
-                </p>
-              </div>
-            </section>
-
-            {/* HOLDINGS */}
-
-            <section className="panel holdings-panel">
-              <div className="panel-header">
-                <div>
-                  <span className="panel-kicker">
-                    POSITIONS
-                  </span>
-
-                  <h3>Your holdings</h3>
-                </div>
-
-                <span className="position-count">
-                  {holdings.length}{" "}
-                  {holdings.length === 1
-                    ? "position"
-                    : "positions"}
-                </span>
-              </div>
-
-              <div className="holdings-labels">
-                <span>Security</span>
-                <span>Investment</span>
-                <span />
-              </div>
-
-              <div className="holdings-list">
-                {holdings.map(
-                  (holding, index) => (
-                    <div
-                      className="holding-row"
-                      key={index}
-                    >
-                      <div className="holding-field">
-                        <span className="field-prefix">
-                          TICKER
-                        </span>
-
-                        <TickerAutocomplete
-                          inputId={`holding-ticker-${index}`}
-                          value={holding.ticker}
-                          onChange={(newValue) =>
-                            updateHolding(
-                              index,
-                              "ticker",
-                              newValue
-                            )
-                          }
-                          onSelect={(suggestion) =>
-                            updateHolding(
-                              index,
-                              "ticker",
-                              suggestion.symbol
-                            )
-                          }
-                          placeholder="e.g. TCS.NS"
-                        />
-                      </div>
-
-                      <div className="holding-field amount-field">
-                        <span className="currency-prefix">
-                          ₹
-                        </span>
-
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          placeholder="40,000"
-                          value={
-                            holding.amount
-                          }
-                          onChange={(event) =>
-                            updateHolding(
-                              index,
-                              "amount",
-                              event.target.value
-                            )
-                          }
-                        />
-                      </div>
-
-                      <button
-                        className="icon-button"
-                        onClick={() =>
-                          removeHolding(index)
-                        }
-                        disabled={
-                          holdings.length === 1
-                        }
-                        aria-label={`Remove holding ${
-                          index + 1
-                        }`}
-                      >
-                        <TrashIcon />
-                      </button>
-                    </div>
-                  )
-                )}
-              </div>
-
-              <div className="holdings-actions">
-                <button
-                  className="secondary-button"
-                  onClick={addHolding}
-                >
-                  <PlusIcon />
-                  Add position
-                </button>
-
-                <button
-                  className="action-button"
-                  onClick={
-                    analyzePortfolio
-                  }
-                  disabled={portfolioLoading}
-                >
-                  {portfolioLoading ? (
-                    <>
-                      <span className="button-spinner" />
-                      Analyzing
-                    </>
-                  ) : (
-                    <>
-                      Analyze portfolio
-                      <ArrowRight />
-                    </>
-                  )}
-                </button>
-              </div>
-            </section>
-
-            {error && (
-              <ErrorBanner message={error} />
-            )}
-
-            {portfolioLoading && (
-              <LoadingState
-                title="Analyzing portfolio"
-                description="Retrieving holdings and calculating portfolio risk."
-              />
-            )}
-
-            {portfolio && (
-              <>
-                {/* PORTFOLIO OVERVIEW */}
-
-                <section className="content-section">
-                  <SectionHeading
-                    eyebrow="PORTFOLIO OVERVIEW"
-                    title="Risk at a glance"
-                    description="Portfolio-level statistics calculated from historical returns."
-                  />
-
-                  <div className="metric-grid">
-                    <MetricCard
-                      label="Total value"
-                      value={formatCurrency(
-                        portfolio.total_value,
-                        "INR"
-                      )}
-                      caption="Portfolio value"
-                      tone="positive"
-                    />
-
-                    <MetricCard
-                      label="Volatility"
-                      value={`${formatNumber(
-                        portfolio.portfolio_volatility,
-                        3
-                      )}%`}
-                      caption="Daily risk"
-                      tone="warning"
-                    />
-
-                    <MetricCard
-                      label="Sharpe ratio"
-                      value={formatNumber(
-                        portfolio.portfolio_sharpe,
-                        3
-                      )}
-                      caption="Risk-adjusted return"
-                      tone={sharpeTone(
-                        portfolio.portfolio_sharpe
-                      )}
-                    />
-
-                    <MetricCard
-                      label="Value at Risk"
-                      value={`${formatNumber(
-                        portfolio.portfolio_var_95,
-                        3
-                      )}%`}
-                      caption="95% confidence"
-                      tone="negative"
-                    />
-                  </div>
-                </section>
-
-                {/* COMPARISON TABLE */}
-
-                {Array.isArray(
-                  portfolio.comparison
-                ) &&
-                  portfolio.comparison.length > 0 && (
-                    <section className="content-section">
-                      <SectionHeading
-                        eyebrow="HOLDING COMPARISON"
-                        title="Which holdings stand out?"
-                        description="A relative risk-adjusted comparison within this portfolio."
-                        rightText="NOT A BUY / SELL SIGNAL"
-                      />
-
-                      <div className="panel comparison-panel">
-                        <div className="comparison-table">
-                          <div className="comparison-head">
-                            <span>Rank</span>
-                            <span>Security</span>
-                            <span>1Y return</span>
-                            <span>Volatility</span>
-                            <span>Sharpe</span>
-                            <span>VaR 95%</span>
-                            <span>Gain / Loss</span>
-                          </div>
-
-                          {portfolio.comparison.map(
-                            (stock) => (
-                              <div
-                                className={`comparison-row ${
-                                  stock.rank === 1
-                                    ? "is-top"
-                                    : ""
-                                }`}
-                                key={
-                                  stock.ticker
-                                }
-                              >
-                                <span className="rank-cell">
-                                  {stock.rank}
-                                </span>
-
-                                <div className="comparison-stock">
-                                  <strong>
-                                    {
-                                      stock.ticker
-                                    }
-                                  </strong>
-
-                                  {stock.rank ===
-                                    1 && (
-                                    <span>
-                                      Strongest risk-adjusted
-                                      profile
-                                    </span>
-                                  )}
-                                </div>
-
-                                <span
-                                  className={
-                                    Number(
-                                      stock.return_1y
-                                    ) >= 0
-                                      ? "positive-text"
-                                      : "negative-text"
-                                  }
-                                >
-                                  {Number(
-                                    stock.return_1y
-                                  ) >= 0
-                                    ? "+"
-                                    : ""}
-                                  {
-                                    stock.return_1y
-                                  }
-                                  %
-                                </span>
-
-                                <span>
-                                  {
-                                    stock.volatility
-                                  }
-                                  %
-                                </span>
-
-                                <span
-                                  className={
-                                    Number(
-                                      stock.sharpe
-                                    ) > 1
-                                      ? "positive-text"
-                                      : Number(
-                                          stock.sharpe
-                                        ) > 0
-                                      ? "warning-text"
-                                      : "negative-text"
-                                  }
-                                >
-                                  {
-                                    stock.sharpe
-                                  }
-                                </span>
-
-                                <span>
-                                  {
-                                    stock.var_95
-                                  }
-                                  %
-                                </span>
-
-                                <strong
-                                  className={`gain-cell ${
-                                    Number(
-                                      stock.return_1y
-                                    ) >= 0
-                                      ? "positive-text"
-                                      : "negative-text"
-                                  }`}
-                                >
-                                  {(() => {
-                                    const weightPct =
-                                      Number(
-                                        portfolio
-                                          .weights?.[
-                                          stock
-                                            .ticker
-                                        ]
-                                      ) || 0;
-
-                                    const invested =
-                                      (weightPct /
-                                        100) *
-                                      Number(
-                                        portfolio.total_value ||
-                                          0
-                                      );
-
-                                    const gain =
-                                      invested *
-                                      (Number(
-                                        stock.return_1y
-                                      ) /
-                                        100);
-
-                                    return `${
-                                      gain >= 0
-                                        ? "+"
-                                        : ""
-                                    }${formatCurrency(
-                                      gain,
-                                      "INR"
-                                    )}`;
-                                  })()}
-                                </strong>
-                              </div>
-                            )
-                          )}
-                        </div>
-
-                        <div className="table-note">
-                          Rank is based on a
-                          risk-adjusted score combining
-                          return, Sharpe ratio, volatility
-                          and downside risk. Gain / loss
-                          reflects the 1-year return
-                          applied to your invested amount
-                          for each holding.
-                        </div>
-                      </div>
-                    </section>
-                  )}
-
-                {/* RISK / RETURN GRAPH */}
-
-                {riskReturnData.length > 0 && (
-                  <section className="content-section">
-                    <SectionHeading
-                      eyebrow="RISK / RETURN"
-                      title="Where your holdings sit"
-                      description="Higher return and lower volatility generally indicate a stronger risk-return position."
-                      rightText="1Y RETURN · DAILY VOLATILITY"
-                    />
-
-                    <div className="panel risk-return-panel">
-                      <div className="risk-return-chart">
-                        <ResponsiveContainer
-                          width="100%"
-                          height={380}
-                        >
-                          <ScatterChart
-                            margin={{
-                              top: 20,
-                              right: 24,
-                              bottom: 18,
-                              left: 8,
-                            }}
-                          >
-                            <CartesianGrid
-                              stroke="#1a2228"
-                              strokeDasharray="3 5"
-                              vertical={false}
-                            />
-
-                            <XAxis
-                              type="number"
-                              dataKey="volatility"
-                              name="Daily volatility"
-                              tick={{
-                                fill: "#66717a",
-                                fontSize: 10,
-                              }}
-                              tickLine={false}
-                              axisLine={{
-                                stroke:
-                                  "#252e35",
-                              }}
-                              tickFormatter={(
-                                value
-                              ) =>
-                                `${value}%`
-                              }
-                              label={{
-                                value:
-                                  "Daily volatility",
-                                position:
-                                  "insideBottom",
-                                offset: -8,
-                                fill:
-                                  "#59646d",
-                                fontSize: 10,
-                              }}
-                            />
-
-                            <YAxis
-                              type="number"
-                              dataKey="return1y"
-                              name="1Y return"
-                              tick={{
-                                fill: "#66717a",
-                                fontSize: 10,
-                              }}
-                              tickLine={false}
-                              axisLine={{
-                                stroke:
-                                  "#252e35",
-                              }}
-                              tickFormatter={(
-                                value
-                              ) =>
-                                `${value}%`
-                              }
-                              label={{
-                                value: "1Y return",
-                                angle: -90,
-                                position:
-                                  "insideLeft",
-                                fill:
-                                  "#59646d",
-                                fontSize: 10,
-                              }}
-                            />
-
-                            <ZAxis
-                              type="number"
-                              dataKey="weight"
-                              range={[
-                                90,
-                                360,
-                              ]}
-                              name="Portfolio weight"
-                            />
-
-                            <Tooltip
-                              cursor={{
-                                stroke:
-                                  "rgba(255,255,255,0.12)",
-                                strokeDasharray:
-                                  "4 4",
-                              }}
-                              content={
-                                <RiskReturnTooltip />
-                              }
-                            />
-
-                            <Scatter
-                              name="Holdings"
-                              data={
-                                riskReturnData
-                              }
-                              fill="#2be98c"
-                            />
-                          </ScatterChart>
-                        </ResponsiveContainer>
-                      </div>
-
-                      <div className="risk-return-footer">
-                        <div className="risk-return-hint">
-                          <div className="hint-axis">
-                            <span className="hint-arrow">
-                              ↖
-                            </span>
-
-                            <div>
-                              <strong>
-                                More attractive position
-                              </strong>
-
-                              <span>
-                                Higher return with
-                                lower volatility
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="hint-axis">
-                            <span className="hint-arrow">
-                              →
-                            </span>
-
-                            <div>
-                              <strong>
-                                More risk
-                              </strong>
-
-                              <span>
-                                Volatility increases
-                                toward the right
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="hint-axis">
-                            <span className="hint-dot" />
-
-                            <div>
-                              <strong>
-                                Larger circle
-                              </strong>
-
-                              <span>
-                                Larger portfolio
-                                allocation
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-                )}
-
-                {/* ALLOCATION + CORRELATION */}
-
-                <section className="two-column-section portfolio-detail-section">
-                  <div className="panel">
-                    <SectionHeading
-                      eyebrow="ALLOCATION"
-                      title="Portfolio weights"
-                      description="Share of total invested capital."
-                      compact
-                    />
-
-                    <div className="detail-list">
-                      {Object.entries(
-                        portfolio.weights ||
-                          {}
-                      ).map(
-                        ([tickerName, weight]) => (
-                          <div
-                            className="detail-row"
-                            key={tickerName}
-                          >
-                            <div className="detail-name">
-                              <span className="detail-dot" />
-                              <span>
-                                {tickerName}
-                              </span>
-                            </div>
-
-                            <strong>
-                              {weight}%
-                            </strong>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="panel">
-                    <SectionHeading
-                      eyebrow="DIVERSIFICATION"
-                      title="Correlation"
-                      description="Relationship between portfolio holdings."
-                      compact
-                    />
-
-                    <div className="detail-list">
-                      {Object.entries(
-                        portfolio.correlation ||
-                          {}
-                      ).length > 0 ? (
-                        Object.entries(
-                          portfolio.correlation
-                        ).map(
-                          ([pair, value]) => (
-                            <div
-                              className="detail-row"
-                              key={pair}
-                            >
-                              <span>
-                                {pair.replaceAll(
-                                  "_",
-                                  " ↔ "
-                                )}
-                              </span>
-
-                              <strong className="correlation-value">
-                                {value}
-                              </strong>
-                            </div>
-                          )
-                        )
-                      ) : (
-                        <div className="empty-detail">
-                          Correlation data is
-                          unavailable for this
-                          portfolio.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </section>
-              </>
-            )}
-          </main>
-        )}
-
-        <footer className="footer">
-          <span>PORTFOLIOOS</span>
-          <span>
-            QUANTITATIVE RISK ANALYTICS
-          </span>
-        </footer>
-      </div>
-    </div>
-  );
+  padding: 32px 0 70px;
 }
 
 /* =========================================================
-   REUSABLE COMPONENTS
+   HEADER
    ========================================================= */
 
-function SectionHeading({
-  eyebrow,
-  title,
-  description,
-  rightText,
-  compact = false,
-}) {
-  return (
-    <div
-      className={`section-heading ${
-        compact ? "compact" : ""
-      }`}
-    >
-      <div>
-        <span className="section-kicker">
-          {eyebrow}
-        </span>
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 
-        <h2>{title}</h2>
+  margin-bottom: 30px;
+}
 
-        {description && (
-          <p>{description}</p>
-        )}
-      </div>
+.brand-group {
+  display: flex;
+  align-items: center;
 
-      {rightText && (
-        <span className="section-note">
-          {rightText}
-        </span>
-      )}
-    </div>
+  gap: 11px;
+}
+
+.brand-logo {
+  width: 34px;
+  height: 34px;
+
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+
+  gap: 2px;
+
+  padding: 7px;
+
+  border: 1px solid rgba(43, 233, 140, 0.18);
+  border-radius: 9px;
+
+  background: rgba(43, 233, 140, 0.035);
+}
+
+.brand-logo span {
+  width: 4px;
+
+  border-radius: 2px 2px 1px 1px;
+
+  background: var(--green);
+}
+
+.brand-logo span:nth-child(1) {
+  height: 9px;
+}
+
+.brand-logo span:nth-child(2) {
+  height: 15px;
+}
+
+.brand-logo span:nth-child(3) {
+  height: 20px;
+}
+
+.brand-name {
+  color: var(--text);
+
+  font-size: 1.15rem;
+  line-height: 1;
+
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.brand-subtitle {
+  margin-top: 4px;
+
+  color: var(--muted-dark);
+
+  font-size: 0.61rem;
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+
+  gap: 7px;
+
+  padding: 7px 10px;
+
+  border: 1px solid var(--line);
+  border-radius: 999px;
+
+  color: var(--muted);
+
+  background: rgba(13, 17, 20, 0.7);
+
+  font-size: 0.55rem;
+
+  white-space: nowrap;
+}
+
+.connection-dot {
+  width: 6px;
+  height: 6px;
+
+  border-radius: 50%;
+
+  background: var(--green);
+}
+
+/* =========================================================
+   NAVIGATION
+   ========================================================= */
+
+.main-nav {
+  display: flex;
+
+  gap: 3px;
+
+  margin-bottom: 44px;
+
+  border-bottom: 1px solid var(--line);
+}
+
+.nav-item {
+  position: relative;
+
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+
+  padding: 11px 14px 13px;
+
+  border: none;
+
+  background: transparent;
+
+  color: var(--muted);
+
+  cursor: pointer;
+
+  font-size: 0.67rem;
+  font-weight: 600;
+
+  transition:
+    color 0.18s ease,
+    background 0.18s ease;
+}
+
+.nav-item:hover {
+  color: var(--text-soft);
+}
+
+.nav-item.active {
+  color: var(--text);
+}
+
+.nav-item.active svg {
+  color: var(--green);
+}
+
+.nav-item.active::after {
+  content: "";
+
+  position: absolute;
+
+  bottom: -1px;
+  left: 8px;
+  right: 8px;
+
+  height: 2px;
+
+  background: var(--green);
+}
+
+/* =========================================================
+   PAGE INTRO
+   ========================================================= */
+
+.page-intro {
+  margin-bottom: 27px;
+
+  max-width: 760px;
+}
+
+.section-kicker {
+  display: block;
+
+  margin-bottom: 8px;
+
+  color: var(--green);
+
+  font-size: 0.5rem;
+  font-weight: 700;
+
+  letter-spacing: 1.3px;
+}
+
+.page-intro h1 {
+  color: var(--text);
+
+  font-size: clamp(
+    1.65rem,
+    3vw,
+    2.15rem
+  );
+
+  line-height: 1.12;
+
+  font-weight: 650;
+
+  letter-spacing: -0.045em;
+}
+
+.page-intro p {
+  max-width: 650px;
+
+  margin-top: 10px;
+
+  color: var(--muted);
+
+  font-size: 0.72rem;
+  line-height: 1.75;
+}
+
+/* =========================================================
+   PANELS
+   ========================================================= */
+
+.panel {
+  border: 1px solid var(--line);
+
+  border-radius: var(--radius-lg);
+
+  background: var(--panel);
+
+  box-shadow: var(--shadow);
+}
+
+/* =========================================================
+   SEARCH
+   ========================================================= */
+
+.search-panel {
+  margin-bottom: 34px;
+
+  padding: 18px;
+
+  border: 1px solid var(--line);
+
+  border-radius: var(--radius-lg);
+
+  background:
+    linear-gradient(
+      115deg,
+      rgba(255, 255, 255, 0.012),
+      transparent 55%
+    ),
+    var(--panel);
+}
+
+.input-label {
+  display: block;
+
+  margin-bottom: 8px;
+
+  color: var(--text-soft);
+
+  font-size: 0.61rem;
+  font-weight: 600;
+}
+
+.search-row {
+  display: flex;
+
+  gap: 9px;
+}
+
+.search-field {
+  min-width: 0;
+  flex: 1;
+
+  height: 48px;
+
+  display: flex;
+  align-items: center;
+
+  border: 1px solid var(--line-strong);
+
+  border-radius: var(--radius);
+
+  background: var(--input);
+
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.search-field:hover {
+  border-color: #36414a;
+}
+
+.search-field:focus-within {
+  border-color: rgba(43, 233, 140, 0.4);
+
+  box-shadow:
+    0 0 0 3px rgba(43, 233, 140, 0.025);
+}
+
+.search-symbol {
+  display: grid;
+  place-items: center;
+
+  padding-left: 13px;
+
+  color: var(--muted);
+}
+
+.search-field:focus-within
+  .search-symbol {
+  color: var(--green);
+}
+
+.search-field input {
+  width: 100%;
+  min-width: 0;
+
+  height: 100%;
+
+  border: none;
+  outline: none;
+
+  padding: 0 13px 0 9px;
+
+  background: transparent;
+
+  color: var(--text);
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: 0.69rem;
+}
+
+.search-field input::placeholder {
+  color: #4f5a63;
+}
+
+/* =========================================================
+   TICKER AUTOCOMPLETE
+   ========================================================= */
+
+.ticker-autocomplete {
+  position: relative;
+
+  width: 100%;
+  min-width: 0;
+}
+
+.ticker-suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+
+  max-height: 280px;
+  overflow-y: auto;
+
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+
+  background: var(--panel-2);
+
+  box-shadow: var(--shadow);
+
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+}
+
+.ticker-suggestion-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+
+  padding: 9px 10px;
+
+  border-radius: calc(var(--radius) - 4px);
+
+  cursor: pointer;
+
+  transition: background 0.12s ease;
+}
+
+.ticker-suggestion-row.highlighted,
+.ticker-suggestion-row:hover {
+  background: var(--panel-3);
+}
+
+.ticker-suggestion-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+
+  min-width: 0;
+}
+
+.ticker-suggestion-symbol {
+  flex-shrink: 0;
+
+  color: var(--text);
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.ticker-suggestion-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  color: var(--muted);
+
+  font-size: 0.66rem;
+}
+
+.ticker-suggestion-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  flex-shrink: 0;
+}
+
+.ticker-tag {
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+
+  padding: 2px 6px;
+
+  color: var(--muted);
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: 0.58rem;
+  letter-spacing: 0.03em;
+}
+
+.ticker-tag-etf {
+  border-color: rgba(231, 200, 90, 0.35);
+  color: var(--yellow);
+}
+
+.ticker-suggestions-empty {
+  padding: 12px 14px;
+
+  color: var(--muted-dark);
+
+  font-size: 0.65rem;
+}
+
+.action-button {
+  height: 48px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 10px;
+
+  padding: 0 16px;
+
+  border: 1px solid var(--green);
+
+  border-radius: var(--radius);
+
+  background: var(--green);
+
+  color: #00150b;
+
+  cursor: pointer;
+
+  font-size: 0.66rem;
+  font-weight: 700;
+
+  white-space: nowrap;
+
+  transition:
+    transform 0.16s ease,
+    background 0.16s ease;
+}
+
+.action-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+
+  background: #3af09b;
+}
+
+.action-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.action-button:disabled {
+  cursor: wait;
+
+  opacity: 0.55;
+}
+
+.example-row {
+  display: flex;
+  align-items: center;
+
+  flex-wrap: wrap;
+
+  gap: 6px;
+
+  margin-top: 11px;
+}
+
+.example-row span {
+  margin-right: 2px;
+
+  color: var(--muted-dark);
+
+  font-size: 0.55rem;
+}
+
+.example-row button {
+  padding: 4px 7px;
+
+  border: 1px solid var(--line);
+
+  border-radius: 5px;
+
+  background: transparent;
+
+  color: var(--muted);
+
+  cursor: pointer;
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: 0.52rem;
+
+  transition:
+    color 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.example-row button:hover {
+  border-color: var(--line-strong);
+
+  color: var(--green);
+}
+
+/* =========================================================
+   SECURITY HEADER
+   ========================================================= */
+
+.security-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 25px;
+
+  padding: 22px;
+
+  margin-bottom: 35px;
+
+  border: 1px solid var(--line);
+
+  border-radius: var(--radius-lg);
+
+  background: var(--panel);
+}
+
+.security-identity {
+  display: flex;
+  align-items: center;
+
+  gap: 13px;
+}
+
+.security-avatar {
+  width: 48px;
+  height: 48px;
+
+  display: grid;
+  place-items: center;
+
+  border: 1px solid rgba(43, 233, 140, 0.14);
+  border-radius: 10px;
+
+  background: rgba(43, 233, 140, 0.035);
+
+  color: var(--green);
+
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.security-name {
+  color: var(--text);
+
+  font-size: 1rem;
+  font-weight: 650;
+
+  letter-spacing: -0.02em;
+}
+
+.security-meta {
+  display: flex;
+  align-items: center;
+
+  gap: 7px;
+
+  margin-top: 5px;
+
+  color: var(--muted);
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: 0.53rem;
+}
+
+.meta-separator {
+  color: #404951;
+}
+
+.price-block {
+  text-align: right;
+}
+
+.price-block span {
+  display: block;
+
+  margin-bottom: 6px;
+
+  color: var(--muted-dark);
+
+  font-size: 0.51rem;
+  font-weight: 600;
+
+  text-transform: uppercase;
+  letter-spacing: 0.9px;
+}
+
+.price-block strong {
+  color: var(--green);
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: 1.45rem;
+  font-weight: 500;
+
+  letter-spacing: -0.045em;
+}
+
+/* =========================================================
+   SECTION HEADING
+   ========================================================= */
+
+.content-section {
+  margin-bottom: 43px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+
+  gap: 20px;
+
+  margin-bottom: 17px;
+}
+
+.section-heading.compact {
+  display: block;
+}
+
+.section-heading h2 {
+  color: var(--text);
+
+  font-size: 1rem;
+  line-height: 1.2;
+
+  font-weight: 650;
+
+  letter-spacing: -0.025em;
+}
+
+.section-heading p {
+  max-width: 640px;
+
+  margin-top: 5px;
+
+  color: var(--muted);
+
+  font-size: 0.62rem;
+  line-height: 1.55;
+}
+
+.section-note {
+  flex: 0 0 auto;
+
+  padding: 5px 8px;
+
+  border: 1px solid var(--line);
+
+  border-radius: 5px;
+
+  color: var(--muted-dark);
+
+  font-size: 0.46rem;
+  font-weight: 650;
+
+  letter-spacing: 0.7px;
+
+  white-space: nowrap;
+}
+
+/* =========================================================
+   METRICS
+   ========================================================= */
+
+.metric-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+
+  gap: 10px;
+}
+
+.metric-card {
+  min-height: 132px;
+
+  padding: 17px 18px;
+
+  border: 1px solid var(--line);
+
+  border-radius: var(--radius);
+
+  background: var(--panel);
+
+  transition:
+    background 0.17s ease,
+    border-color 0.17s ease,
+    transform 0.17s ease;
+}
+
+.metric-card:hover {
+  background: var(--panel-2);
+
+  border-color: var(--line-strong);
+
+  transform: translateY(-1px);
+}
+
+.metric-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 12px;
+}
+
+.metric-card-top > span:first-child {
+  color: var(--muted);
+
+  font-size: 0.66rem;
+  font-weight: 600;
+
+  text-transform: uppercase;
+
+  letter-spacing: 0.8px;
+}
+
+.metric-dot {
+  width: 6px;
+  height: 6px;
+
+  flex: 0 0 auto;
+
+  border-radius: 50%;
+
+  background: var(--muted-dark);
+}
+
+.metric-dot.positive {
+  background: var(--green);
+}
+
+.metric-dot.warning {
+  background: var(--yellow);
+}
+
+.metric-dot.negative {
+  background: var(--red);
+}
+
+.metric-dot.neutral {
+  background: var(--muted-dark);
+}
+
+.metric-number {
+  display: block;
+
+  margin-top: 18px;
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: 1.23rem;
+
+  font-weight: 500;
+
+  letter-spacing: -0.045em;
+}
+
+.metric-number.positive {
+  color: var(--green);
+}
+
+.metric-number.warning {
+  color: var(--yellow);
+}
+
+.metric-number.negative {
+  color: var(--red);
+}
+
+.metric-number.neutral {
+  color: var(--text);
+}
+
+.metric-caption {
+  display: block;
+
+  margin-top: 7px;
+
+  font-size: 0.72rem;
+  font-weight: 550;
+
+  letter-spacing: 0.4px;
+}
+
+.metric-caption.positive {
+  color: var(--green);
+}
+
+.metric-caption.warning {
+  color: var(--yellow);
+}
+
+.metric-caption.negative {
+  color: var(--red);
+}
+
+.metric-caption.neutral {
+  color: var(--muted);
+}
+
+/* =========================================================
+   TWO COLUMN
+   ========================================================= */
+
+.two-column-section {
+  display: grid;
+
+  grid-template-columns:
+    minmax(0, 1.48fr)
+    minmax(320px, 0.82fr);
+
+  gap: 13px;
+
+  margin-bottom: 43px;
+}
+
+.two-column-section > .panel {
+  min-width: 0;
+}
+
+/* =========================================================
+   CHART
+   ========================================================= */
+
+.chart-panel {
+  padding: 19px 20px 11px;
+}
+
+.chart-container {
+  width: 100%;
+}
+
+/* =========================================================
+   RISK INTERPRETATION
+   ========================================================= */
+
+.interpretation-panel {
+  display: flex;
+  flex-direction: column;
+
+  padding: 20px;
+}
+
+.interpretation-top {
+  display: flex;
+  align-items: flex-start;
+
+  gap: 10px;
+
+  padding-bottom: 17px;
+
+  border-bottom: 1px solid var(--line);
+}
+
+.interpretation-icon {
+  width: 30px;
+  height: 30px;
+
+  flex: 0 0 auto;
+
+  display: grid;
+  place-items: center;
+
+  border: 1px solid rgba(43, 233, 140, 0.11);
+
+  border-radius: 7px;
+
+  background: rgba(43, 233, 140, 0.03);
+
+  color: var(--green);
+}
+
+.panel-kicker {
+  display: block;
+
+  margin-bottom: 4px;
+
+  color: var(--green);
+
+  font-size: 0.46rem;
+  font-weight: 700;
+
+  letter-spacing: 1px;
+}
+
+.interpretation-top h3 {
+  color: var(--text);
+
+  font-size: 0.8rem;
+  font-weight: 650;
+
+  letter-spacing: -0.015em;
+}
+
+.interpretation-copy {
+  color: var(--text-soft);
+
+  margin-top: 18px;
+
+  font-size: 0.67rem;
+  line-height: 1.85;
+}
+
+.interpretation-source {
+  display: flex;
+  align-items: center;
+
+  gap: 7px;
+
+  margin-top: auto;
+  padding-top: 20px;
+
+  color: var(--muted-dark);
+
+  font-size: 0.5rem;
+}
+
+.source-dot {
+  width: 5px;
+  height: 5px;
+
+  border-radius: 50%;
+
+  background: var(--green);
+}
+
+/* =========================================================
+   MONTE CARLO
+   ========================================================= */
+
+.scenario-panel {
+  padding: 18px 20px 8px;
+}
+
+.scenario-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(5, minmax(0, 1fr));
+
+  padding-bottom: 15px;
+
+  border-bottom: 1px solid var(--line);
+}
+
+.scenario-item {
+  padding: 0 14px;
+
+  border-right: 1px solid var(--line);
+}
+
+.scenario-item:first-child {
+  padding-left: 0;
+}
+
+.scenario-item:last-child {
+  padding-right: 0;
+  border-right: none;
+}
+
+.scenario-item > span {
+  display: block;
+
+  margin-bottom: 6px;
+
+  color: var(--muted-dark);
+
+  font-size: 0.48rem;
+  font-weight: 600;
+
+  letter-spacing: 0.65px;
+}
+
+.scenario-item > strong {
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: 0.7rem;
+
+  font-weight: 500;
+}
+
+.scenario-item > strong.positive {
+  color: var(--green);
+}
+
+.scenario-item > strong.negative {
+  color: var(--red);
+}
+
+.scenario-item > strong.neutral {
+  color: var(--text);
+}
+
+.scenario-chart {
+  width: 100%;
+}
+
+/* =========================================================
+   PORTFOLIO HOLDINGS
+   ========================================================= */
+
+.holdings-panel {
+  margin-bottom: 33px;
+
+  padding: 20px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+
+  gap: 15px;
+
+  margin-bottom: 21px;
+}
+
+.panel-header h3 {
+  margin-top: 2px;
+
+  color: var(--text);
+
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.position-count {
+  color: var(--muted-dark);
+
+  font-size: 0.51rem;
+  font-weight: 600;
+
+  white-space: nowrap;
+}
+
+.holdings-labels {
+  display: grid;
+
+  grid-template-columns:
+    minmax(0, 1.6fr)
+    minmax(0, 1fr)
+    38px;
+
+  gap: 9px;
+
+  padding: 0 9px 8px;
+
+  color: var(--muted-dark);
+
+  font-size: 0.48rem;
+  font-weight: 650;
+
+  letter-spacing: 0.8px;
+}
+
+.holdings-list {
+  display: flex;
+  flex-direction: column;
+
+  gap: 8px;
+}
+
+.holding-row {
+  display: grid;
+
+  grid-template-columns:
+    minmax(0, 1.6fr)
+    minmax(0, 1fr)
+    38px;
+
+  gap: 9px;
+}
+
+.holding-field {
+  height: 46px;
+
+  display: flex;
+  align-items: center;
+
+  border: 1px solid var(--line);
+
+  border-radius: 7px;
+
+  background: var(--input);
+
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease;
+}
+
+.holding-field:hover {
+  border-color: #303a43;
+}
+
+.holding-field:focus-within {
+  border-color: rgba(43, 233, 140, 0.38);
+
+  background: #0b1013;
+}
+
+.field-prefix {
+  padding-left: 12px;
+
+  color: var(--muted-dark);
+
+  font-size: 0.6rem;
+  font-weight: 700;
+
+  letter-spacing: 0.7px;
+
+  white-space: nowrap;
+}
+
+.currency-prefix {
+  padding-left: 14px;
+
+  color: var(--muted);
+
+  font-size: 0.82rem;
+}
+
+.holding-field input {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+
+  border: none;
+  outline: none;
+
+  padding: 0 14px;
+
+  background: transparent;
+
+  color: var(--text);
+
+  font-size: 0.82rem;
+}
+
+.holding-field:first-child input {
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+}
+
+.amount-field input {
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+}
+
+.holding-field input::placeholder {
+  color: #46515a;
+}
+
+.icon-button {
+  height: 46px;
+
+  display: grid;
+  place-items: center;
+
+  border: 1px solid var(--line);
+
+  border-radius: 7px;
+
+  background: transparent;
+
+  color: var(--muted-dark);
+
+  cursor: pointer;
+
+  transition:
+    color 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+
+.icon-button:hover:not(:disabled) {
+  color: var(--red);
+
+  border-color: rgba(
+    255,
+    102,
+    102,
+    0.23
+  );
+
+  background: rgba(
+    255,
+    102,
+    102,
+    0.025
   );
 }
 
-function MetricCard({
-  label,
-  value,
-  caption,
-  tone = "neutral",
-}) {
-  return (
-    <article className="metric-card">
-      <div className="metric-card-top">
-        <span>{label}</span>
+.icon-button:disabled {
+  opacity: 0.2;
+  cursor: default;
+}
 
-        <span
-          className={`metric-dot ${tone}`}
-        />
-      </div>
+.holdings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 
-      <strong
-        className={`metric-number ${tone}`}
-      >
-        {value}
-      </strong>
+  gap: 14px;
 
-      <span
-        className={`metric-caption ${tone}`}
-      >
-        {caption}
-      </span>
-    </article>
+  margin-top: 17px;
+  padding-top: 17px;
+
+  border-top: 1px solid var(--line);
+}
+
+.secondary-button {
+  height: 40px;
+
+  display: inline-flex;
+  align-items: center;
+
+  gap: 7px;
+
+  padding: 0 11px;
+
+  border: 1px solid var(--line);
+  border-radius: 7px;
+
+  background: transparent;
+
+  color: var(--muted);
+
+  cursor: pointer;
+
+  font-size: 0.6rem;
+  font-weight: 600;
+
+  transition:
+    color 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+
+.secondary-button:hover {
+  color: var(--text-soft);
+
+  border-color: var(--line-strong);
+
+  background: rgba(
+    255,
+    255,
+    255,
+    0.012
   );
 }
 
-function Scenario({
-  label,
-  value,
-  tone,
-  currency,
-}) {
-  return (
-    <div className="scenario-item">
-      <span>{label}</span>
+.holdings-actions .action-button {
+  height: 42px;
+}
 
-      <strong className={tone}>
-        {formatScenarioValue(
-          value,
-          currency
-        )}
-      </strong>
-    </div>
+/* =========================================================
+   COMPARISON TABLE
+   ========================================================= */
+
+.comparison-panel {
+  overflow: hidden;
+}
+
+.comparison-table {
+  overflow-x: auto;
+}
+
+.comparison-head,
+.comparison-row {
+  min-width: 800px;
+
+  display: grid;
+
+  grid-template-columns:
+    52px
+    minmax(150px, 1.55fr)
+    repeat(4, minmax(90px, 1fr))
+    75px;
+
+  align-items: center;
+
+  gap: 9px;
+}
+
+.comparison-head {
+  padding: 12px 17px;
+
+  border-bottom: 1px solid var(--line);
+
+  color: var(--muted-dark);
+
+  font-size: 0.47rem;
+  font-weight: 700;
+
+  text-transform: uppercase;
+  letter-spacing: 0.75px;
+}
+
+.comparison-row {
+  padding: 15px 17px;
+
+  border-bottom: 1px solid #171d21;
+
+  color: var(--text-soft);
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: 0.59rem;
+
+  transition:
+    background 0.16s ease;
+}
+
+.comparison-row:last-child {
+  border-bottom: none;
+}
+
+.comparison-row:hover {
+  background: rgba(
+    255,
+    255,
+    255,
+    0.008
   );
 }
 
-function formatScenarioValue(
-  value,
-  currency
-) {
-  if (
-    value === null ||
-    value === undefined ||
-    value === ""
-  ) {
-    return "—";
+.comparison-row.is-top {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(43, 233, 140, 0.035),
+      transparent 55%
+    );
+}
+
+.rank-cell {
+  color: var(--muted-dark);
+}
+
+.comparison-stock {
+  min-width: 0;
+}
+
+.comparison-stock strong {
+  display: block;
+
+  color: var(--text);
+
+  font-size: 0.63rem;
+  font-weight: 600;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comparison-stock span {
+  display: block;
+
+  margin-top: 4px;
+
+  color: var(--green);
+
+  font-family:
+    Inter,
+    ui-sans-serif,
+    sans-serif;
+
+  font-size: 0.42rem;
+  font-weight: 650;
+
+  letter-spacing: 0.55px;
+}
+
+.positive-text {
+  color: var(--green);
+}
+
+.warning-text {
+  color: var(--yellow);
+}
+
+.negative-text {
+  color: var(--red);
+}
+
+.score-cell {
+  color: var(--green);
+
+  font-size: 0.67rem;
+  font-weight: 650;
+}
+
+.gain-cell {
+  font-size: 0.7rem;
+  font-weight: 650;
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  letter-spacing: -0.02em;
+}
+
+.table-note {
+  padding: 13px 17px;
+
+  border-top: 1px solid var(--line);
+
+  color: var(--muted-dark);
+
+  font-size: 0.53rem;
+  line-height: 1.65;
+}
+
+/* =========================================================
+   RISK / RETURN GRAPH
+   ========================================================= */
+
+.risk-return-panel {
+  padding: 18px 20px 0;
+
+  overflow: hidden;
+}
+
+.risk-return-chart {
+  width: 100%;
+  min-height: 380px;
+}
+
+.risk-return-footer {
+  padding: 15px 0 17px;
+
+  border-top: 1px solid var(--line);
+}
+
+.risk-return-hint {
+  display: flex;
+  align-items: center;
+
+  gap: 28px;
+}
+
+.hint-axis {
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+}
+
+.hint-arrow {
+  width: 23px;
+  height: 23px;
+
+  display: grid;
+  place-items: center;
+
+  border: 1px solid var(--line);
+
+  border-radius: 6px;
+
+  color: var(--green);
+
+  font-size: 0.75rem;
+}
+
+.hint-dot {
+  width: 9px;
+  height: 9px;
+
+  display: block;
+
+  border-radius: 50%;
+
+  background: var(--green);
+
+  box-shadow:
+    0 0 0 4px rgba(
+      43,
+      233,
+      140,
+      0.07
+    );
+}
+
+.hint-axis strong {
+  display: block;
+
+  color: var(--text-soft);
+
+  font-size: 0.52rem;
+  font-weight: 600;
+}
+
+.hint-axis span:not(
+  .hint-arrow
+):not(.hint-dot) {
+  display: block;
+
+  margin-top: 2px;
+
+  color: var(--muted-dark);
+
+  font-size: 0.47rem;
+}
+
+/* =========================================================
+   GRAPH TOOLTIP
+   ========================================================= */
+
+.risk-return-tooltip {
+  min-width: 185px;
+
+  padding: 11px 12px;
+
+  border: 1px solid #2a343c;
+
+  border-radius: 8px;
+
+  background: #10151a;
+
+  box-shadow:
+    0 14px 32px rgba(0, 0, 0, 0.35);
+}
+
+.tooltip-title {
+  padding-bottom: 8px;
+
+  margin-bottom: 8px;
+
+  border-bottom: 1px solid var(--line);
+
+  color: var(--green);
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: 0.65rem;
+  font-weight: 650;
+}
+
+.tooltip-grid {
+  display: grid;
+
+  grid-template-columns:
+    1fr auto;
+
+  gap: 6px 14px;
+}
+
+.tooltip-grid span {
+  color: var(--muted);
+
+  font-size: 0.51rem;
+}
+
+.tooltip-grid strong {
+  color: var(--text);
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: 0.51rem;
+  font-weight: 600;
+}
+
+/* =========================================================
+   PORTFOLIO DETAILS
+   ========================================================= */
+
+.portfolio-detail-section {
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(0, 1fr);
+}
+
+.detail-list {
+  display: flex;
+  flex-direction: column;
+
+  gap: 6px;
+
+  margin-top: 17px;
+}
+
+.detail-row {
+  min-height: 41px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 15px;
+
+  padding: 9px 11px;
+
+  border: 1px solid #171d21;
+
+  border-radius: 7px;
+
+  background: var(--input);
+
+  color: var(--text-soft);
+
+  font-size: 0.6rem;
+}
+
+.detail-row strong {
+  color: var(--text);
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: 0.6rem;
+}
+
+.detail-name {
+  min-width: 0;
+
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+}
+
+.detail-dot {
+  width: 6px;
+  height: 6px;
+
+  flex: 0 0 auto;
+
+  border-radius: 50%;
+
+  background: var(--green);
+}
+
+.correlation-value {
+  color: var(--yellow) !important;
+}
+
+.empty-detail {
+  padding: 20px 12px;
+
+  color: var(--muted-dark);
+
+  font-size: 0.57rem;
+
+  text-align: center;
+}
+
+/* =========================================================
+   LOADING
+   ========================================================= */
+
+.loading-state {
+  display: flex;
+  align-items: center;
+
+  gap: 12px;
+
+  margin-bottom: 28px;
+  padding: 14px 16px;
+
+  border: 1px solid rgba(
+    43,
+    233,
+    140,
+    0.1
+  );
+
+  border-radius: var(--radius);
+
+  background: rgba(
+    43,
+    233,
+    140,
+    0.012
+  );
+}
+
+.loading-indicator {
+  width: 7px;
+  height: 34px;
+
+  position: relative;
+
+  overflow: hidden;
+
+  border-radius: 3px;
+
+  background: rgba(
+    43,
+    233,
+    140,
+    0.12
+  );
+}
+
+.loading-indicator span {
+  position: absolute;
+
+  left: 0;
+  right: 0;
+
+  height: 12px;
+
+  background: var(--green);
+
+  animation:
+    loadingMove 1s infinite ease-in-out;
+}
+
+.loading-state strong {
+  display: block;
+
+  margin-bottom: 3px;
+
+  color: var(--green);
+
+  font-size: 0.61rem;
+  font-weight: 650;
+}
+
+.loading-state p {
+  color: var(--muted-dark);
+
+  font-size: 0.53rem;
+}
+
+/* =========================================================
+   ERROR
+   ========================================================= */
+
+.error-banner {
+  display: flex;
+  align-items: flex-start;
+
+  gap: 10px;
+
+  margin-bottom: 27px;
+  padding: 12px 14px;
+
+  border: 1px solid rgba(
+    255,
+    102,
+    102,
+    0.17
+  );
+
+  border-radius: var(--radius);
+
+  background: rgba(
+    255,
+    102,
+    102,
+    0.025
+  );
+}
+
+.error-icon {
+  width: 18px;
+  height: 18px;
+
+  flex: 0 0 auto;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: 50%;
+
+  background: rgba(
+    255,
+    102,
+    102,
+    0.08
+  );
+
+  color: var(--red);
+
+  font-size: 0.61rem;
+  font-weight: 700;
+}
+
+.error-banner strong {
+  display: block;
+
+  margin-bottom: 3px;
+
+  color: #ff7777;
+
+  font-size: 0.58rem;
+}
+
+.error-banner p {
+  color: #a86868;
+
+  font-size: 0.57rem;
+  line-height: 1.5;
+}
+
+/* =========================================================
+   BUTTON SPINNER
+   ========================================================= */
+
+.button-spinner {
+  width: 11px;
+  height: 11px;
+
+  border: 2px solid rgba(
+    0,
+    21,
+    11,
+    0.18
+  );
+
+  border-top-color: #00150b;
+
+  border-radius: 50%;
+
+  animation:
+    spin 0.7s linear infinite;
+}
+
+/* =========================================================
+   FOOTER
+   ========================================================= */
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+
+  gap: 20px;
+
+  margin-top: 15px;
+  padding-top: 23px;
+
+  border-top: 1px solid var(--line);
+
+  color: #353e46;
+
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+
+  font-size: 0.45rem;
+
+  letter-spacing: 0.9px;
+}
+
+/* =========================================================
+   ANIMATIONS
+   ========================================================= */
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes loadingMove {
+  0% {
+    top: -12px;
   }
 
-  try {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: String(
-        currency || "USD"
-      ).toUpperCase(),
-      maximumFractionDigits: 2,
-    }).format(Number(value));
-  } catch {
-    return Number(value).toLocaleString(
-      "en-IN",
-      {
-        maximumFractionDigits: 2,
-      }
+  50% {
+    top: 12px;
+  }
+
+  100% {
+    top: 34px;
+  }
+}
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
+@media (max-width: 980px) {
+  .app-frame {
+    width: min(
+      100% - 34px,
+      1160px
     );
   }
-}
 
-function RiskReturnTooltip({
-  active,
-  payload,
-}) {
-  if (
-    !active ||
-    !payload ||
-    !payload.length ||
-    !payload[0]?.payload
-  ) {
-    return null;
+  .metric-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
   }
 
-  const stock = payload[0].payload;
-
-  return (
-    <div className="risk-return-tooltip">
-      <div className="tooltip-title">
-        {stock.ticker}
-      </div>
-
-      <div className="tooltip-grid">
-        <span>1Y return</span>
-
-        <strong
-          className={
-            stock.return1y >= 0
-              ? "positive-text"
-              : "negative-text"
-          }
-        >
-          {stock.return1y >= 0
-            ? "+"
-            : ""}
-          {stock.return1y}%
-        </strong>
-
-        <span>Volatility</span>
-
-        <strong>
-          {stock.volatility}%
-        </strong>
-
-        <span>Sharpe</span>
-
-        <strong>{stock.sharpe}</strong>
-
-        <span>VaR 95%</span>
-
-        <strong>{stock.var95}%</strong>
-
-        <span>Portfolio weight</span>
-
-        <strong>
-          {stock.weight}%
-        </strong>
-      </div>
-    </div>
-  );
+  .two-column-section {
+    grid-template-columns: 1fr;
+  }
 }
 
-function ErrorBanner({ message }) {
-  return (
-    <div className="error-banner">
-      <span className="error-icon">!</span>
+/* =========================================================
+   MOBILE
+   ========================================================= */
 
-      <div>
-        <strong>
-          Something went wrong
-        </strong>
+@media (max-width: 680px) {
+  .app-frame {
+    width: calc(100% - 22px);
 
-        <p>{message}</p>
-      </div>
-    </div>
-  );
+    padding-top: 22px;
+    padding-bottom: 42px;
+  }
+
+  .header {
+    margin-bottom: 24px;
+  }
+
+  .connection-status {
+    display: none;
+  }
+
+  .brand-name {
+    font-size: 1.05rem;
+  }
+
+  .brand-subtitle {
+    font-size: 0.55rem;
+  }
+
+  .main-nav {
+    margin-bottom: 32px;
+  }
+
+  .nav-item {
+    padding: 10px 11px 12px;
+
+    font-size: 0.62rem;
+  }
+
+  .page-intro {
+    margin-bottom: 22px;
+  }
+
+  .page-intro h1 {
+    font-size: 1.45rem;
+  }
+
+  .page-intro p {
+    font-size: 0.65rem;
+  }
+
+  .search-panel {
+    padding: 14px;
+
+    margin-bottom: 25px;
+  }
+
+  .search-row {
+    flex-direction: column;
+  }
+
+  .action-button {
+    width: 100%;
+  }
+
+  .security-header {
+    align-items: flex-start;
+
+    flex-direction: column;
+
+    gap: 20px;
+
+    padding: 18px;
+  }
+
+  .price-block {
+    text-align: left;
+  }
+
+  .price-block strong {
+    font-size: 1.3rem;
+  }
+
+  .section-heading {
+    align-items: flex-start;
+
+    flex-direction: column;
+
+    gap: 8px;
+  }
+
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scenario-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+
+    row-gap: 16px;
+  }
+
+  .scenario-item {
+    padding: 0;
+
+    border-right: none;
+  }
+
+  .scenario-item:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .holdings-labels {
+    display: none;
+  }
+
+  .holding-row {
+    grid-template-columns:
+      minmax(0, 1fr)
+      38px;
+
+    gap: 8px;
+  }
+
+  .amount-field {
+    grid-column: 1;
+  }
+
+  .holding-row .icon-button {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+
+    height: 100%;
+  }
+
+  .holdings-actions {
+    align-items: stretch;
+
+    flex-direction: column;
+  }
+
+  .holdings-actions .secondary-button,
+  .holdings-actions .action-button {
+    width: 100%;
+  }
+
+  .comparison-table {
+    overflow-x: auto;
+  }
+
+  .comparison-head,
+  .comparison-row {
+    min-width: 800px;
+  }
+
+  .risk-return-panel {
+    overflow-x: auto;
+  }
+
+  .risk-return-chart {
+    min-width: 650px;
+  }
+
+  .risk-return-hint {
+    align-items: flex-start;
+
+    flex-direction: column;
+
+    gap: 12px;
+  }
+
+  .footer {
+    flex-direction: column;
+
+    align-items: flex-start;
+
+    gap: 7px;
+  }
 }
 
-function LoadingState({
-  title,
-  description,
-}) {
-  return (
-    <div className="loading-state">
-      <div className="loading-indicator">
-        <span />
-      </div>
+/* =========================================================
+   SMALL MOBILE
+   ========================================================= */
 
-      <div>
-        <strong>{title}</strong>
-        <p>{description}</p>
-      </div>
-    </div>
+@media (max-width: 420px) {
+  .example-row {
+    gap: 5px;
+  }
+
+  .example-row button {
+    padding: 4px 6px;
+
+    font-size: 0.48rem;
+  }
+
+  .security-avatar {
+    width: 43px;
+    height: 43px;
+  }
+
+  .security-name {
+    font-size: 0.9rem;
+  }
+
+  .security-meta {
+    font-size: 0.49rem;
+  }
+}
+/* =========================================================
+   AI SUMMARY LOADING SKELETON
+   ========================================================= */
+
+.interpretation-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.summary-skeleton-line {
+  display: block;
+  height: 12px;
+  width: 100%;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    #1a2228 25%,
+    #232d35 37%,
+    #1a2228 63%
   );
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+.summary-skeleton-line.short {
+  width: 60%;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+.interpretation-loading-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: #69737b;
+}
+
+.loading-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2be98c;
+  animation: loading-dot-pulse 1.2s ease infinite;
+}
+
+@keyframes loading-dot-pulse {
+  0%, 100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
 }
