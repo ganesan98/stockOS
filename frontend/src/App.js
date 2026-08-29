@@ -167,6 +167,7 @@ export default function App() {
 
   const [mode, setMode] = useState("single");
   const [loading, setLoading] = useState(false);
+  const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [error, setError] = useState("");
@@ -264,16 +265,10 @@ export default function App() {
      ------------------------------------------------------- */
 
   async function analyzePortfolio() {
-    setLoading(true);
+    setPortfolioLoading(true);
     setError("");
 
     setPortfolio(null);
-    setInfo(null);
-    setRisk(null);
-    setMc(null);
-    setHistory([]);
-    setSummary("");
-    setSummaryLoading(false);
 
     try {
       const validHoldings = holdings.filter(
@@ -287,7 +282,7 @@ export default function App() {
         setError(
           "Add at least one stock and a valid investment amount."
         );
-        setLoading(false);
+        setPortfolioLoading(false);
         return;
       }
 
@@ -312,7 +307,7 @@ export default function App() {
           "Unable to analyze this portfolio. Check the holdings and try again."
       );
     } finally {
-      setLoading(false);
+      setPortfolioLoading(false);
     }
   }
 
@@ -1296,9 +1291,9 @@ export default function App() {
                   onClick={
                     analyzePortfolio
                   }
-                  disabled={loading}
+                  disabled={portfolioLoading}
                 >
-                  {loading ? (
+                  {portfolioLoading ? (
                     <>
                       <span className="button-spinner" />
                       Analyzing
@@ -1317,7 +1312,7 @@ export default function App() {
               <ErrorBanner message={error} />
             )}
 
-            {loading && (
+            {portfolioLoading && (
               <LoadingState
                 title="Analyzing portfolio"
                 description="Retrieving holdings and calculating portfolio risk."
