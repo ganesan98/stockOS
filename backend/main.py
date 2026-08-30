@@ -630,6 +630,9 @@ def get_summary(ticker: str):
             "Close"
         ].tolist()
 
+        clean_prices = [p for p in prices if math.isfinite(p)]
+        last_price = clean_prices[-1] if clean_prices else 0.0
+
         # ---------------------------------------------
         # Company information
         # ---------------------------------------------
@@ -642,7 +645,7 @@ def get_summary(ticker: str):
             )
             current_price = (
                 info.get("currentPrice")
-                or prices[-1]
+                or last_price
             )
 
         except Exception as e:
@@ -650,7 +653,7 @@ def get_summary(ticker: str):
                 f"Info fetch error in summary for {ticker}: {e}"
             )
             name = ticker
-            current_price = prices[-1]
+            current_price = last_price
 
         # ---------------------------------------------
         # Risk calculations
@@ -807,12 +810,14 @@ def _fetch_ticker_data(ticker: str, amount: float, total_value: float):
 
     prices = hist["Close"].tolist()
 
-    if len(prices) < 2:
+    clean_prices = [p for p in prices if math.isfinite(p)]
+
+    if len(clean_prices) < 2:
         raise ValueError(
             f"Insufficient historical data for {ticker}"
         )
 
-    returns = get_returns(prices)
+    returns = get_returns(clean_prices)
 
     # Strip any NaN / Inf that yfinance can produce for illiquid tickers
     returns = returns[np.isfinite(returns)]
@@ -823,7 +828,7 @@ def _fetch_ticker_data(ticker: str, amount: float, total_value: float):
         )
 
     one_year_return = (
-        (prices[-1] / prices[0]) - 1
+        (clean_prices[-1] / clean_prices[0]) - 1
     ) * 100
 
     return {

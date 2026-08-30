@@ -21,10 +21,14 @@ def sharpe_ratio(returns, risk_free_rate=0.07):
 
 def monte_carlo(prices: list, simulations=10000, days=252):
     try:
-        returns = get_returns(prices)
+        clean_prices = [p for p in prices if np.isfinite(p)]
+        if not clean_prices:
+            raise ValueError("No valid prices found")
+            
+        returns = get_returns(clean_prices)
         mu = float(np.mean(returns))
         sigma = float(np.std(returns))
-        last_price = float(prices[-1])
+        last_price = float(clean_prices[-1])
 
         # Guard against degenerate inputs
         if sigma == 0 or not np.isfinite(mu) or not np.isfinite(sigma):
@@ -71,7 +75,8 @@ def monte_carlo(prices: list, simulations=10000, days=252):
     except Exception as exc:
         # Last-resort fallback: return flat projection rather than crashing
         print(f"[monte_carlo] Numerical error: {exc}")
-        last_price = float(prices[-1]) if prices else 0.0
+        clean_prices = [p for p in prices if np.isfinite(p)]
+        last_price = float(clean_prices[-1]) if clean_prices else 0.0
         return {
             "simulations": simulations,
             "days": days,
