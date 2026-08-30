@@ -54,16 +54,29 @@ client = Groq(
 _executor = ThreadPoolExecutor(max_workers=10)
 
 app = FastAPI(
-    title="PortfolioOS API",
+    title="StockOS API",
     description="Stock and portfolio risk analytics API",
     version="1.0.0",
 )
 
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+_default_origins = ",".join(
+    [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://stockos-zwxi.vercel.app",
+    ]
+)
+
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", _default_origins).split(",")
+    if origin.strip()
+]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
@@ -327,7 +340,7 @@ def build_stock_comparison(stock_stats):
 @app.get("/")
 def root():
     return {
-        "message": "PortfolioOS backend is live"
+        "message": "StockOS backend is live"
     }
 
 
@@ -336,7 +349,7 @@ def ping():
     """
     Lightweight keep-alive / warmup endpoint.
     The frontend calls this on page load and tab-refocus so the
-    Render free-tier dyno is already warm before the user hits Analyze.
+    API is already warm before the user hits Analyze.
     """
     return {"status": "ok"}
 

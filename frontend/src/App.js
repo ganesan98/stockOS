@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
 import TickerAutocomplete from "./TickerAutocomplete";
+import { API } from "./api";
 import {
   LineChart,
   Line,
@@ -15,10 +16,6 @@ import {
   ZAxis,
 } from "recharts";
 import "./App.css";
-
-const API =
-  process.env.REACT_APP_API_URL ||
-  "https://portfolioos-backend-1qdb.onrender.com";
 
 /* =========================================================
    FETCH WITH RETRY UTILITY
@@ -242,7 +239,7 @@ export default function App() {
     try {
       await axios.get(`${API}/ping`, {
         signal: controller.signal,
-        timeout: 35000, // Render free tier can take up to 35s on cold start
+        timeout: 35000,
       });
       setServerStatus("awake");
     } catch (err) {
@@ -703,7 +700,7 @@ export default function App() {
           <div>
             <strong>Server waking up</strong>
             <p>
-              Free tier backend may take up to 30 s on first
+              The API may take a few seconds on first
               request — subsequent ones will be fast.
             </p>
           </div>
@@ -732,7 +729,7 @@ export default function App() {
 
             <div>
               <div className="brand-name">
-                PortfolioOS
+                StockOS
               </div>
 
               <div className="brand-subtitle">
@@ -2119,7 +2116,7 @@ export default function App() {
         )}
 
         <footer className="footer">
-          <span>PORTFOLIOOS</span>
+          <span>STOCKOS</span>
           <span>
             QUANTITATIVE RISK ANALYTICS
           </span>

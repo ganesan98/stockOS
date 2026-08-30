@@ -1,9 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-
-const API =
-  process.env.REACT_APP_API_URL ||
-  "https://portfolioos-backend-1qdb.onrender.com";
+import { API } from "./api";
 
 /**
  * Debounced ticker search + suggestion dropdown.
