@@ -426,20 +426,49 @@ def get_stock(ticker: str):
 
     stock = yf.Ticker(ticker)
 
-    info = fetch_info_with_retry(stock, ticker)
+    name = ticker
+    price = None
+    currency = None
+
+    # Attempt 1: full info dict (throttled often for .NS tickers)
+    try:
+        info = fetch_info_with_retry(stock, ticker, retries=2)
+        name = info.get("longName") or ticker
+        price = info.get("currentPrice")
+        currency = info.get("currency")
+    except Exception as e:
+        print(f"[get_stock] info failed for {ticker}: {e}")
+
+    # Attempt 2: fast_info fallback
+    if price is None:
+        try:
+            fi = stock.fast_info
+            price = getattr(fi, "last_price", None)
+            currency = getattr(fi, "currency", None) or currency
+        except Exception as e:
+            print(f"[get_stock] fast_info failed for {ticker}: {e}")
+
+    # Attempt 3: derive last price from recent history
+    if price is None:
+        try:
+            hist = stock.history(period="5d", timeout=10)
+            if not hist.empty:
+                price = float(hist["Close"].iloc[-1])
+        except Exception as e:
+            print(f"[get_stock] history fallback failed for {ticker}: {e}")
+
+    # If we still have nothing, the ticker is likely invalid
+    if price is None and name == ticker:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Could not find data for ticker '{ticker}'. Check the symbol and try again.",
+        )
 
     return {
         "ticker": ticker,
-        "name": (
-            info.get("longName")
-            or ticker
-        ),
-        "price": info.get(
-            "currentPrice"
-        ),
-        "currency": info.get(
-            "currency"
-        ),
+        "name": name,
+        "price": price,
+        "currency": currency or "USD",
     }
 
 
