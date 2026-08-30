@@ -12,6 +12,9 @@ from finance import (
 
 import os
 import json
+import asyncio
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 from groq import Groq
 from itertools import combinations
@@ -31,6 +34,9 @@ client = Groq(
     api_key=GROQ_API_KEY
 )
 
+# Thread pool for running blocking yfinance calls concurrently
+# inside async endpoints.
+_executor = ThreadPoolExecutor(max_workers=10)
 
 app = FastAPI(
     title="PortfolioOS API",
@@ -79,7 +85,109 @@ for _entry in TICKER_DIRECTORY:
 
 
 # =========================================================
-# HELPERS
+# HELPERS — RESILIENT YFINANCE FETCHING
+# =========================================================
+
+def _fetch_history_sync(ticker: str, period: str = "1y", timeout: int = 10):
+    """
+    Blocking yfinance history fetch with explicit timeout.
+    Called inside a thread pool from async endpoints.
+    """
+    stock = yf.Ticker(ticker)
+    hist = stock.history(period=period, timeout=timeout)
+    return stock, hist
+
+
+def fetch_history_with_retry(
+    ticker: str,
+    period: str = "1y",
+    retries: int = 3,
+    backoff: float = 1.5,
+    timeout: int = 10,
+):
+    """
+    Synchronous wrapper: fetch yfinance history with automatic retries.
+    Suitable for use inside a thread pool executor.
+
+    Raises HTTPException(503) after all retries are exhausted.
+    """
+    last_error = None
+
+    for attempt in range(retries):
+        try:
+            stock = yf.Ticker(ticker)
+            hist = stock.history(period=period, timeout=timeout)
+            return stock, hist
+
+        except Exception as exc:
+            last_error = exc
+            print(
+                f"[yfinance] history attempt {attempt + 1}/{retries} "
+                f"failed for {ticker}: {exc}"
+            )
+
+            if attempt < retries - 1:
+                time.sleep(backoff * (attempt + 1))
+
+    raise HTTPException(
+        status_code=503,
+        detail=(
+            f"Yahoo Finance is temporarily unavailable for {ticker}. "
+            "Please try again in a moment."
+        ),
+    )
+
+
+def fetch_info_with_retry(
+    stock,
+    ticker: str,
+    retries: int = 3,
+    backoff: float = 1.5,
+):
+    """
+    Synchronous wrapper: fetch yfinance info dict with retries,
+    falling back to fast_info on repeated failure.
+    """
+    last_error = None
+
+    for attempt in range(retries):
+        try:
+            return stock.info
+
+        except Exception as exc:
+            last_error = exc
+            print(
+                f"[yfinance] info attempt {attempt + 1}/{retries} "
+                f"failed for {ticker}: {exc}"
+            )
+
+            if attempt < retries - 1:
+                time.sleep(backoff * (attempt + 1))
+
+    # Final fallback: fast_info
+    try:
+        fi = stock.fast_info
+        return {
+            "longName": ticker,
+            "currentPrice": getattr(fi, "last_price", None),
+            "currency": getattr(fi, "currency", "USD"),
+        }
+    except Exception as fallback_exc:
+        print(
+            f"[yfinance] fast_info fallback failed for {ticker}: "
+            f"{fallback_exc}"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Yahoo Finance is temporarily unavailable. "
+                "Please try again."
+            ),
+        )
+
+
+# =========================================================
+# HELPERS — SCORING
 # =========================================================
 
 def normalize_scores(
@@ -198,7 +306,7 @@ def build_stock_comparison(stock_stats):
 
 
 # =========================================================
-# ROOT
+# ROOT / WARMUP
 # =========================================================
 
 @app.get("/")
@@ -206,6 +314,16 @@ def root():
     return {
         "message": "PortfolioOS backend is live"
     }
+
+
+@app.get("/ping")
+def ping():
+    """
+    Lightweight keep-alive / warmup endpoint.
+    The frontend calls this on page load and tab-refocus so the
+    Render free-tier dyno is already warm before the user hits Analyze.
+    """
+    return {"status": "ok"}
 
 
 # =========================================================
@@ -293,47 +411,7 @@ def get_stock(ticker: str):
 
     stock = yf.Ticker(ticker)
 
-    try:
-        info = stock.info
-
-    except Exception as e:
-        print(
-            f"Yahoo Finance info error for "
-            f"{ticker}: {e}"
-        )
-
-        try:
-            fast_info = stock.fast_info
-
-            price = fast_info.get(
-                "lastPrice"
-            )
-
-            currency = fast_info.get(
-                "currency"
-            )
-
-            return {
-                "ticker": ticker,
-                "name": ticker,
-                "price": price,
-                "currency": currency,
-            }
-
-        except Exception as fallback_error:
-            print(
-                "Yahoo Finance fallback error "
-                f"for {ticker}: "
-                f"{fallback_error}"
-            )
-
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "Yahoo Finance is temporarily "
-                    "unavailable. Please try again."
-                ),
-            )
+    info = fetch_info_with_retry(stock, ticker)
 
     return {
         "ticker": ticker,
@@ -362,10 +440,8 @@ def get_history(
     ticker = ticker.strip().upper()
 
     try:
-        stock = yf.Ticker(ticker)
-
-        hist = stock.history(
-            period=period
+        _stock, hist = fetch_history_with_retry(
+            ticker, period=period
         )
 
         if hist.empty:
@@ -416,11 +492,7 @@ def get_risk(ticker: str):
     ticker = ticker.strip().upper()
 
     try:
-        stock = yf.Ticker(ticker)
-
-        hist = stock.history(
-            period="1y"
-        )
+        _stock, hist = fetch_history_with_retry(ticker)
 
         if hist.empty:
             raise HTTPException(
@@ -482,11 +554,7 @@ def get_montecarlo(ticker: str):
     ticker = ticker.strip().upper()
 
     try:
-        stock = yf.Ticker(ticker)
-
-        hist = stock.history(
-            period="1y"
-        )
+        _stock, hist = fetch_history_with_retry(ticker)
 
         if hist.empty:
             raise HTTPException(
@@ -532,11 +600,7 @@ def get_summary(ticker: str):
     ticker = ticker.strip().upper()
 
     try:
-        stock = yf.Ticker(ticker)
-
-        hist = stock.history(
-            period="1y"
-        )
+        _stock, hist = fetch_history_with_retry(ticker)
 
         if hist.empty:
             raise HTTPException(
@@ -556,43 +620,22 @@ def get_summary(ticker: str):
         # ---------------------------------------------
 
         try:
-            info = stock.info
-
-        except Exception as e:
-            print(
-                f"Yahoo Finance info error "
-                f"for {ticker}: {e}"
-            )
-
-            try:
-                fast_info = stock.fast_info
-
-                name = ticker
-
-                current_price = fast_info.get(
-                    "lastPrice"
-                )
-
-            except Exception as fallback_error:
-                print(
-                    "Yahoo Finance fast_info "
-                    f"error for {ticker}: "
-                    f"{fallback_error}"
-                )
-
-                name = ticker
-                current_price = prices[-1]
-
-        else:
+            info = fetch_info_with_retry(_stock, ticker, retries=2)
             name = (
                 info.get("longName")
                 or ticker
             )
-
             current_price = (
                 info.get("currentPrice")
                 or prices[-1]
             )
+
+        except Exception as e:
+            print(
+                f"Info fetch error in summary for {ticker}: {e}"
+            )
+            name = ticker
+            current_price = prices[-1]
 
         # ---------------------------------------------
         # Risk calculations
@@ -730,11 +773,57 @@ IMPORTANT ACCURACY RULES:
 
 
 # =========================================================
-# PORTFOLIO RISK + COMPARISON
+# PORTFOLIO RISK + COMPARISON  (async, concurrent fetching)
 # =========================================================
 
+def _fetch_ticker_data(ticker: str, amount: float, total_value: float):
+    """
+    Blocking worker that fetches 1 year of yfinance history and
+    computes individual risk metrics for a single ticker.
+    Returns a dict on success or raises an exception on failure.
+    Runs inside a ThreadPoolExecutor.
+    """
+    _stock, hist = fetch_history_with_retry(ticker, retries=3, backoff=1.0)
+
+    if hist.empty:
+        raise ValueError(
+            f"No historical data found for {ticker}"
+        )
+
+    prices = hist["Close"].tolist()
+
+    if len(prices) < 2:
+        raise ValueError(
+            f"Insufficient historical data for {ticker}"
+        )
+
+    returns = get_returns(prices)
+
+    if len(returns) == 0:
+        raise ValueError(
+            f"Unable to calculate returns for {ticker}"
+        )
+
+    one_year_return = (
+        (prices[-1] / prices[0]) - 1
+    ) * 100
+
+    return {
+        "ticker": ticker,
+        "returns": list(returns),
+        "weight": amount / total_value,
+        "stats": {
+            "ticker": ticker,
+            "return_1y": round(float(one_year_return), 2),
+            "volatility": round(float(volatility(returns)) * 100, 3),
+            "sharpe": round(float(sharpe_ratio(returns)), 3),
+            "var_95": round(float(historical_var(returns)) * 100, 3),
+        },
+    }
+
+
 @app.post("/portfolio/risk")
-def portfolio_risk(data: dict):
+async def portfolio_risk(data: dict):
 
     holdings = data.get(
         "holdings",
@@ -855,153 +944,113 @@ def portfolio_risk(data: dict):
         )
 
     # -----------------------------------------------------
-    # Historical data + individual metrics
+    # Fetch all tickers CONCURRENTLY in thread pool
+    # Each ticker gets a 20-second timeout.
+    # Failed tickers are collected rather than crashing
+    # the whole request.
+    # -----------------------------------------------------
+
+    loop = asyncio.get_running_loop()
+    PER_TICKER_TIMEOUT = 20  # seconds
+
+    async def fetch_one(ticker: str, amount: float):
+        try:
+            result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor,
+                    _fetch_ticker_data,
+                    ticker,
+                    amount,
+                    total_value,
+                ),
+                timeout=PER_TICKER_TIMEOUT,
+            )
+            return {"ok": True, "data": result}
+        except asyncio.TimeoutError:
+            print(f"[portfolio] Timeout fetching {ticker}")
+            return {
+                "ok": False,
+                "ticker": ticker,
+                "reason": f"{ticker} timed out — Yahoo Finance did not respond in time.",
+            }
+        except HTTPException as exc:
+            return {
+                "ok": False,
+                "ticker": ticker,
+                "reason": exc.detail,
+            }
+        except Exception as exc:
+            print(f"[portfolio] Error for {ticker}: {exc}")
+            return {
+                "ok": False,
+                "ticker": ticker,
+                "reason": str(exc),
+            }
+
+    results = await asyncio.gather(
+        *[
+            fetch_one(h["ticker"], h["amount"])
+            for h in holdings
+        ]
+    )
+
+    # Separate successes from failures
+    successes = [r for r in results if r["ok"]]
+    failures = [r for r in results if not r["ok"]]
+
+    if not successes:
+        # Every ticker failed — surface meaningful detail
+        failed_detail = "; ".join(
+            f"{f['ticker']}: {f['reason']}" for f in failures
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=f"Unable to fetch data for any holding. {failed_detail}",
+            headers={"X-Failed-Tickers": ",".join(f["ticker"] for f in failures)},
+        )
+
+    # Warn about partial failures in the response body rather
+    # than raising — callers can still show what succeeded.
+    failed_tickers = [
+        {"ticker": f["ticker"], "reason": f["reason"]}
+        for f in failures
+    ]
+
+    # -----------------------------------------------------
+    # Build combined data structures from successes
     # -----------------------------------------------------
 
     all_returns = {}
     weights = {}
     stock_stats = {}
 
-    for holding in holdings:
+    for r in successes:
+        d = r["data"]
+        ticker = d["ticker"]
+        all_returns[ticker] = d["returns"]
+        weights[ticker] = d["weight"]
+        stock_stats[ticker] = d["stats"]
 
-        ticker = holding[
-            "ticker"
-        ]
-
-        amount = holding[
-            "amount"
-        ]
-
-        try:
-            stock = yf.Ticker(
-                ticker
-            )
-
-            hist = stock.history(
-                period="1y"
-            )
-
-            if hist.empty:
-                raise HTTPException(
-                    status_code=404,
-                    detail=(
-                        f"No historical data "
-                        f"found for {ticker}"
-                    ),
-                )
-
-            prices = hist[
-                "Close"
-            ].tolist()
-
-            if len(prices) < 2:
-                raise HTTPException(
-                    status_code=422,
-                    detail=(
-                        f"Insufficient historical "
-                        f"data for {ticker}"
-                    ),
-                )
-
-            returns = get_returns(
-                prices
-            )
-
-            if len(returns) == 0:
-                raise HTTPException(
-                    status_code=422,
-                    detail=(
-                        f"Unable to calculate "
-                        f"returns for {ticker}"
-                    ),
-                )
-
-            all_returns[ticker] = returns
-
-            weights[ticker] = (
-                amount / total_value
-            )
-
-            # ---------------------------------------------
-            # Individual stock comparison metrics
-            # ---------------------------------------------
-
-            one_year_return = (
-                (
-                    prices[-1]
-                    / prices[0]
-                )
-                - 1
-            ) * 100
-
-            stock_stats[ticker] = {
-                "ticker": ticker,
-
-                "return_1y": round(
-                    float(
-                        one_year_return
-                    ),
-                    2,
-                ),
-
-                "volatility": round(
-                    float(
-                        volatility(
-                            returns
-                        )
-                    ) * 100,
-                    3,
-                ),
-
-                "sharpe": round(
-                    float(
-                        sharpe_ratio(
-                            returns
-                        )
-                    ),
-                    3,
-                ),
-
-                "var_95": round(
-                    float(
-                        historical_var(
-                            returns
-                        )
-                    ) * 100,
-                    3,
-                ),
-            }
-
-        except HTTPException:
-            raise
-
-        except Exception as e:
-            print(
-                f"Portfolio data error "
-                f"for {ticker}: {e}"
-            )
-
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    f"Unable to retrieve data "
-                    f"for {ticker}. Please try again."
-                ),
-            )
+    # Re-normalise weights if some tickers failed and
+    # their amounts are now missing from the denominator.
+    if failures:
+        successful_tickers = list(all_returns.keys())
+        successful_amounts = {
+            h["ticker"]: h["amount"]
+            for h in holdings
+            if h["ticker"] in successful_tickers
+        }
+        new_total = sum(successful_amounts.values())
+        if new_total > 0:
+            for t in successful_tickers:
+                weights[t] = successful_amounts[t] / new_total
+            total_value = new_total
 
     # -----------------------------------------------------
     # Portfolio returns
     # -----------------------------------------------------
 
-    tickers = list(
-        all_returns.keys()
-    )
-
-    if not tickers:
-        raise HTTPException(
-            status_code=400,
-            detail="No valid holdings were found.",
-        )
+    tickers = list(all_returns.keys())
 
     min_len = min(
         len(returns)
@@ -1018,9 +1067,7 @@ def portfolio_risk(data: dict):
             ),
         )
 
-    portfolio_returns = np.zeros(
-        min_len
-    )
+    portfolio_returns = np.zeros(min_len)
 
     for ticker in tickers:
         portfolio_returns += (
@@ -1137,4 +1184,8 @@ def portfolio_risk(data: dict):
         "correlation": corr_matrix,
 
         "comparison": comparison,
+
+        # Empty list when all tickers succeeded;
+        # populated when some failed so the UI can surface detail.
+        "failed_tickers": failed_tickers,
     }

@@ -232,6 +232,18 @@ input:focus-visible {
   font-size: 0.55rem;
 
   white-space: nowrap;
+
+  transition: border-color 0.3s, color 0.3s;
+}
+
+.connection-status.pinging {
+  border-color: rgba(231, 200, 90, 0.25);
+  color: var(--yellow);
+}
+
+.connection-status.error {
+  border-color: rgba(255, 102, 102, 0.25);
+  color: var(--red);
 }
 
 .connection-dot {
@@ -241,6 +253,25 @@ input:focus-visible {
   border-radius: 50%;
 
   background: var(--green);
+
+  transition: background 0.3s;
+}
+
+.connection-status.pinging .connection-dot {
+  background: var(--yellow);
+}
+
+.connection-status.error .connection-dot {
+  background: var(--red);
+}
+
+.connection-dot.pulsing {
+  animation: dot-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.35); }
 }
 
 /* =========================================================
@@ -2421,4 +2452,205 @@ input:focus-visible {
   50% {
     opacity: 1;
   }
+}
+
+/* =========================================================
+   COLD-START TOAST
+   ========================================================= */
+
+.cold-start-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+
+  max-width: 480px;
+  width: calc(100vw - 48px);
+
+  padding: 14px 16px;
+
+  background: #151c22;
+  border: 1px solid rgba(231, 200, 90, 0.3);
+  border-radius: var(--radius-lg);
+
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(231, 200, 90, 0.08);
+
+  animation: toast-slide-up 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes toast-slide-up {
+  from { opacity: 0; transform: translateX(-50%) translateY(16px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.cold-start-icon {
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.cold-start-toast strong {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--yellow);
+  margin-bottom: 3px;
+}
+
+.cold-start-toast p {
+  font-size: 0.67rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.cold-start-dismiss {
+  margin-left: auto;
+  flex-shrink: 0;
+
+  background: none;
+  border: none;
+  cursor: pointer;
+
+  color: var(--muted-dark);
+  font-size: 0.75rem;
+
+  padding: 2px 4px;
+
+  transition: color 0.15s;
+}
+
+.cold-start-dismiss:hover {
+  color: var(--text-soft);
+}
+
+/* =========================================================
+   ENDPOINT ERROR CARDS (per-card retry)
+   ========================================================= */
+
+.endpoint-error-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  padding: 14px 16px;
+  margin-bottom: 16px;
+
+  background: rgba(255, 102, 102, 0.05);
+  border: 1px solid rgba(255, 102, 102, 0.18);
+  border-radius: var(--radius);
+
+  animation: fade-in 0.25s ease both;
+}
+
+.endpoint-error-card.inline {
+  /* Sits inside metric-grid — span full width */
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.endpoint-error-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.endpoint-error-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--red);
+  opacity: 0.75;
+}
+
+.endpoint-error-msg {
+  font-size: 0.72rem;
+  color: var(--text-soft);
+  line-height: 1.4;
+}
+
+.endpoint-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  flex-shrink: 0;
+
+  padding: 7px 13px;
+
+  background: rgba(255, 102, 102, 0.1);
+  border: 1px solid rgba(255, 102, 102, 0.3);
+  border-radius: 6px;
+
+  color: var(--red);
+  font-size: 0.7rem;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.endpoint-retry-btn:hover {
+  background: rgba(255, 102, 102, 0.18);
+  border-color: rgba(255, 102, 102, 0.5);
+}
+
+/* =========================================================
+   ERROR BANNER RETRY BUTTON
+   ========================================================= */
+
+.error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.error-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  flex-shrink: 0;
+  margin-left: auto;
+  align-self: center;
+
+  padding: 7px 13px;
+
+  background: rgba(255, 102, 102, 0.1);
+  border: 1px solid rgba(255, 102, 102, 0.3);
+  border-radius: 6px;
+
+  color: var(--red);
+  font-size: 0.7rem;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.error-retry-btn:hover {
+  background: rgba(255, 102, 102, 0.18);
+  border-color: rgba(255, 102, 102, 0.5);
+}
+
+.error-retry-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }

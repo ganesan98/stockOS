@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
 import TickerAutocomplete from "./TickerAutocomplete";
 import {
@@ -19,6 +19,29 @@ import "./App.css";
 const API =
   process.env.REACT_APP_API_URL ||
   "https://portfolioos-backend-1qdb.onrender.com";
+
+/* =========================================================
+   FETCH WITH RETRY UTILITY
+   Retries a function that returns a Promise up to `retries`
+   times with exponential back-off before giving up.
+   ========================================================= */
+
+async function fetchWithRetry(fn, retries = 2, delay = 1500) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt < retries) {
+        await new Promise((res) =>
+          setTimeout(res, delay * (attempt + 1))
+        );
+      }
+    }
+  }
+  throw lastErr;
+}
 
 /* =========================================================
    ICONS
@@ -147,6 +170,23 @@ const ShieldIcon = () => (
   </svg>
 );
 
+const RetryIcon = () => (
+  <svg
+    width="13"
+    height="13"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+    <path d="M3 3v5h5" />
+  </svg>
+);
+
 /* =========================================================
    APP
    ========================================================= */
@@ -158,6 +198,12 @@ export default function App() {
   const [mc, setMc] = useState(null);
   const [history, setHistory] = useState([]);
   const [summary, setSummary] = useState("");
+
+  // Per-endpoint error states for stock analysis
+  const [infoError, setInfoError] = useState(null);
+  const [riskError, setRiskError] = useState(null);
+  const [mcError, setMcError] = useState(null);
+  const [historyError, setHistoryError] = useState(null);
 
   const [holdings, setHoldings] = useState([
     { ticker: "", amount: "" },
@@ -172,6 +218,163 @@ export default function App() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Warmup / keep-alive state
+  const [serverStatus, setServerStatus] = useState("idle"); // idle | pinging | awake | error
+  const pingControllerRef = useRef(null);
+
+  // Cold-start toast — shown after 5s if loading hasn't resolved
+  const [showColdStartToast, setShowColdStartToast] = useState(false);
+  const coldStartTimerRef = useRef(null);
+
+  /* -------------------------------------------------------
+     WARMUP PING
+     ------------------------------------------------------- */
+
+  const pingServer = useCallback(async () => {
+    // Abort any in-flight ping
+    if (pingControllerRef.current) {
+      pingControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    pingControllerRef.current = controller;
+
+    setServerStatus("pinging");
+    try {
+      await axios.get(`${API}/ping`, {
+        signal: controller.signal,
+        timeout: 35000, // Render free tier can take up to 35s on cold start
+      });
+      setServerStatus("awake");
+    } catch (err) {
+      if (axios.isCancel(err) || err.name === "CanceledError") return;
+      setServerStatus("error");
+    }
+  }, []);
+
+  // Ping on mount
+  useEffect(() => {
+    pingServer();
+  }, [pingServer]);
+
+  // Re-ping when the user switches back to the tab
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.visibilityState === "visible") {
+        pingServer();
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibility);
+  }, [pingServer]);
+
+  /* -------------------------------------------------------
+     COLD-START TOAST
+     Shows a friendly hint after 5s of loading.
+     ------------------------------------------------------- */
+
+  function startColdStartTimer() {
+    clearTimeout(coldStartTimerRef.current);
+    coldStartTimerRef.current = setTimeout(() => {
+      setShowColdStartToast(true);
+    }, 5000);
+  }
+
+  function clearColdStartTimer() {
+    clearTimeout(coldStartTimerRef.current);
+    setShowColdStartToast(false);
+  }
+
+  /* -------------------------------------------------------
+     INDIVIDUAL ENDPOINT FETCHERS
+     Each can be called standalone for retry.
+     ------------------------------------------------------- */
+
+  const currentTickerRef = useRef(""); // track which symbol the callbacks belong to
+
+  const fetchInfo = useCallback(async (symbol) => {
+    setInfoError(null);
+    try {
+      const res = await fetchWithRetry(() =>
+        axios.get(`${API}/stock/${symbol}`)
+      );
+      if (currentTickerRef.current === symbol) {
+        setInfo(res.data);
+      }
+    } catch (err) {
+      if (currentTickerRef.current === symbol) {
+        setInfoError(
+          err?.response?.data?.detail ||
+            "Could not load stock info. Tap retry to try again."
+        );
+      }
+    }
+  }, []);
+
+  const fetchRisk = useCallback(async (symbol) => {
+    setRiskError(null);
+    try {
+      const res = await fetchWithRetry(() =>
+        axios.get(`${API}/stock/${symbol}/risk`)
+      );
+      if (currentTickerRef.current === symbol) {
+        setRisk(res.data);
+      }
+    } catch (err) {
+      if (currentTickerRef.current === symbol) {
+        setRiskError(
+          err?.response?.data?.detail ||
+            "Could not load risk metrics. Tap retry to try again."
+        );
+      }
+    }
+  }, []);
+
+  const fetchMc = useCallback(async (symbol) => {
+    setMcError(null);
+    try {
+      const res = await fetchWithRetry(() =>
+        axios.get(`${API}/stock/${symbol}/montecarlo`)
+      );
+      if (currentTickerRef.current === symbol) {
+        setMc(res.data);
+      }
+    } catch (err) {
+      if (currentTickerRef.current === symbol) {
+        setMcError(
+          err?.response?.data?.detail ||
+            "Could not load Monte Carlo simulation. Tap retry to try again."
+        );
+      }
+    }
+  }, []);
+
+  const fetchHistory = useCallback(async (symbol) => {
+    setHistoryError(null);
+    setHistoryLoading(true);
+    try {
+      const res = await fetchWithRetry(() =>
+        axios.get(`${API}/stock/${symbol}/history`)
+      );
+      if (currentTickerRef.current === symbol) {
+        setHistory(
+          Array.isArray(res.data) ? res.data.slice(-60) : []
+        );
+      }
+    } catch (err) {
+      if (currentTickerRef.current === symbol) {
+        setHistoryError(
+          err?.response?.data?.detail ||
+            "Could not load price history. Tap retry to try again."
+        );
+      }
+    } finally {
+      if (currentTickerRef.current === symbol) {
+        setHistoryLoading(false);
+      }
+    }
+  }, []);
+
   /* -------------------------------------------------------
      Single stock analysis
      ------------------------------------------------------- */
@@ -183,6 +386,7 @@ export default function App() {
     }
 
     const symbol = ticker.trim().toUpperCase();
+    currentTickerRef.current = symbol;
 
     setError("");
     setTicker(symbol);
@@ -193,50 +397,37 @@ export default function App() {
     setHistoryLoading(false);
     setSummary("");
     setPortfolio(null);
+    setInfoError(null);
+    setRiskError(null);
+    setMcError(null);
+    setHistoryError(null);
 
     setLoading(true);
     setSummaryLoading(true);
+    startColdStartTimer();
 
-    // Core market-data calls resolve independently so each
-    // section can render as soon as its own endpoint returns.
-    const infoPromise = axios
-      .get(`${API}/stock/${symbol}`)
-      .then((res) => setInfo(res.data));
+    // All 4 core data calls run independently so each section
+    // renders as soon as its own endpoint returns.
+    const infoPromise = fetchInfo(symbol);
+    const riskPromise = fetchRisk(symbol);
+    const mcPromise = fetchMc(symbol);
+    const historyPromise = fetchHistory(symbol);
 
-    const riskPromise = axios
-      .get(`${API}/stock/${symbol}/risk`)
-      .then((res) => setRisk(res.data));
-
-    const mcPromise = axios
-      .get(`${API}/stock/${symbol}/montecarlo`)
-      .then((res) => setMc(res.data));
-
-    setHistoryLoading(true);
-    const historyPromise = axios
-      .get(`${API}/stock/${symbol}/history`)
-      .then((res) => {
-        setHistory(
-          Array.isArray(res.data)
-            ? res.data.slice(-60)
-            : []
-        );
-      })
-      .finally(() => {
-        setHistoryLoading(false);
-      });
-
-    // Slow AI summary call runs independently and never blocks
-    // rendering of the rest of the stock analysis.
+    // Slow AI summary runs independently and never blocks the rest.
     axios
       .get(`${API}/stock/${symbol}/summary`)
       .then((res) => {
-        setSummary(res.data?.summary || "");
+        if (currentTickerRef.current === symbol) {
+          setSummary(res.data?.summary || "");
+        }
       })
       .catch((err) => {
         console.error("Risk interpretation error:", err);
       })
       .finally(() => {
-        setSummaryLoading(false);
+        if (currentTickerRef.current === symbol) {
+          setSummaryLoading(false);
+        }
       });
 
     try {
@@ -247,16 +438,18 @@ export default function App() {
         historyPromise,
       ]);
     } catch (err) {
-      console.error(err);
-
-      setError(
-        err?.response?.data?.detail ||
-          "Unable to retrieve this security. Check the ticker and try again."
-      );
+      // Individual error states already set above.
+      // Only surface a top-level error if info (ticker validation)
+      // returned a 404, meaning the symbol itself is invalid.
+      if (err?.response?.status === 404) {
+        setError(
+          err?.response?.data?.detail ||
+            "Unable to retrieve this security. Check the ticker and try again."
+        );
+      }
     } finally {
-      // This represents only the core market-data analysis.
-      // The AI summary has its own loading state.
       setLoading(false);
+      clearColdStartTimer();
     }
   }
 
@@ -267,8 +460,8 @@ export default function App() {
   async function analyzePortfolio() {
     setPortfolioLoading(true);
     setError("");
-
     setPortfolio(null);
+    startColdStartTimer();
 
     try {
       const validHoldings = holdings.filter(
@@ -283,6 +476,7 @@ export default function App() {
           "Add at least one stock and a valid investment amount."
         );
         setPortfolioLoading(false);
+        clearColdStartTimer();
         return;
       }
 
@@ -299,15 +493,39 @@ export default function App() {
       );
 
       setPortfolio(response.data);
+
+      // Surface partial failures from the backend
+      const failed = response.data?.failed_tickers;
+      if (failed && failed.length > 0) {
+        const names = failed.map((f) => f.ticker).join(", ");
+        setError(
+          `Analysis succeeded with warnings — could not fetch data for: ${names}. ` +
+            "Results shown exclude those holdings."
+        );
+      }
     } catch (err) {
       console.error(err);
 
-      setError(
-        err?.response?.data?.detail ||
-          "Unable to analyze this portfolio. Check the holdings and try again."
-      );
+      // Extract structured failed_tickers from error response if available
+      const detail = err?.response?.data?.detail || "";
+      const failedHeader =
+        err?.response?.headers?.["x-failed-tickers"] || "";
+
+      if (failedHeader) {
+        const tickers = failedHeader.split(",").join(", ");
+        setError(
+          `Could not fetch data for: ${tickers}. ` +
+            "Check those tickers and try again."
+        );
+      } else {
+        setError(
+          detail ||
+            "Unable to analyze this portfolio. Check the holdings and try again."
+        );
+      }
     } finally {
       setPortfolioLoading(false);
+      clearColdStartTimer();
     }
   }
 
@@ -318,6 +536,12 @@ export default function App() {
   function switchMode(nextMode) {
     setMode(nextMode);
     setError("");
+
+    if (nextMode === "portfolio") {
+      // Re-ping when user enters portfolio tab — warms the server
+      // before they hit Analyze.
+      pingServer();
+    }
   }
 
   function updateHolding(index, field, value) {
@@ -428,12 +652,8 @@ export default function App() {
       : [];
 
   /*
-   * IMPORTANT:
-   * Results are now considered available when ANY part of
+   * Results are considered available when ANY part of
    * the stock analysis is ready, including the AI summary.
-   *
-   * This prevents the whole page from being held back by
-   * one slow endpoint.
    */
   const hasSingleResults =
     info ||
@@ -442,12 +662,60 @@ export default function App() {
     history.length > 0 ||
     historyLoading ||
     summaryLoading ||
-    Boolean(summary);
+    Boolean(summary) ||
+    infoError ||
+    riskError ||
+    mcError ||
+    historyError;
+
+  /* -------------------------------------------------------
+     SERVER STATUS LABEL
+     ------------------------------------------------------- */
+  const statusLabel =
+    serverStatus === "pinging"
+      ? "Waking up server…"
+      : serverStatus === "awake"
+      ? "Market data connected"
+      : serverStatus === "error"
+      ? "Server unreachable"
+      : "Connecting…";
+
+  const statusClass =
+    serverStatus === "awake"
+      ? "connection-status awake"
+      : serverStatus === "error"
+      ? "connection-status error"
+      : "connection-status pinging";
 
   return (
     <div className="app">
       <div className="ambient ambient-one" />
       <div className="ambient ambient-two" />
+
+      {/* COLD START TOAST */}
+      {showColdStartToast && (
+        <div
+          className="cold-start-toast"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="cold-start-icon">⏳</span>
+          <div>
+            <strong>Server waking up</strong>
+            <p>
+              Free tier backend may take up to 30 s on first
+              request — subsequent ones will be fast.
+            </p>
+          </div>
+          <button
+            className="cold-start-dismiss"
+            onClick={() => setShowColdStartToast(false)}
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className="app-frame">
         {/* ===================================================
@@ -473,9 +741,13 @@ export default function App() {
             </div>
           </div>
 
-          <div className="connection-status">
-            <span className="connection-dot" />
-            Market data connected
+          <div className={statusClass}>
+            <span
+              className={`connection-dot ${
+                serverStatus === "pinging" ? "pulsing" : ""
+              }`}
+            />
+            {statusLabel}
           </div>
         </header>
 
@@ -630,15 +902,6 @@ export default function App() {
               <ErrorBanner message={error} />
             )}
 
-            {/*
-             * The large loading screen now appears only when
-             * absolutely nothing from the stock analysis has
-             * arrived yet.
-             *
-             * Because summaryLoading starts immediately, the
-             * AI interpretation area can appear right away
-             * instead of this blocking the entire page.
-             */}
             {loading && !hasSingleResults && (
               <LoadingState
                 title="Analyzing security"
@@ -650,7 +913,13 @@ export default function App() {
               <>
                 {/* STOCK HEADER */}
 
-                {info && (
+                {infoError ? (
+                  <EndpointErrorCard
+                    label="Stock info"
+                    message={infoError}
+                    onRetry={() => fetchInfo(ticker)}
+                  />
+                ) : info ? (
                   <section className="security-header">
                     <div className="security-identity">
                       <div className="security-avatar">
@@ -697,11 +966,11 @@ export default function App() {
                       </strong>
                     </div>
                   </section>
-                )}
+                ) : null}
 
                 {/* RISK OVERVIEW */}
 
-                {(risk || mc) && (
+                {(risk || mc || riskError || mcError) && (
                   <section className="content-section">
                     <SectionHeading
                       eyebrow="RISK OVERVIEW"
@@ -710,101 +979,121 @@ export default function App() {
                     />
 
                     <div className="metric-grid">
-                      <MetricCard
-                        label="Daily volatility"
-                        value={
-                          risk
-                            ? `${formatNumber(
-                                risk.volatility,
-                                3
-                              )}%`
-                            : "Calculating"
-                        }
-                        caption={
-                          risk
-                            ? riskTone(
-                                risk.volatility
-                              ) === "positive"
-                              ? "Lower risk"
-                              : riskTone(
-                                  risk.volatility
-                                ) === "warning"
-                              ? "Moderate"
-                              : "Higher risk"
-                            : "Calculating"
-                        }
-                        tone={
-                          risk
-                            ? riskTone(
-                                risk.volatility
-                              )
-                            : "neutral"
-                        }
-                      />
+                      {riskError ? (
+                        <EndpointErrorCard
+                          label="Risk metrics"
+                          message={riskError}
+                          onRetry={() => fetchRisk(ticker)}
+                          inline
+                        />
+                      ) : (
+                        <>
+                          <MetricCard
+                            label="Daily volatility"
+                            value={
+                              risk
+                                ? `${formatNumber(
+                                    risk.volatility,
+                                    3
+                                  )}%`
+                                : "Calculating"
+                            }
+                            caption={
+                              risk
+                                ? riskTone(
+                                    risk.volatility
+                                  ) === "positive"
+                                  ? "Lower risk"
+                                  : riskTone(
+                                      risk.volatility
+                                    ) === "warning"
+                                  ? "Moderate"
+                                  : "Higher risk"
+                                : "Calculating…"
+                            }
+                            tone={
+                              risk
+                                ? riskTone(
+                                    risk.volatility
+                                  )
+                                : "neutral"
+                            }
+                          />
 
-                      <MetricCard
-                        label="Sharpe ratio"
-                        value={
-                          risk
-                            ? formatNumber(
-                                risk.sharpe_ratio,
-                                3
-                              )
-                            : "Calculating"
-                        }
-                        caption={
-                          risk
-                            ? risk.sharpe_ratio > 1
-                              ? "Strong"
-                              : risk.sharpe_ratio > 0
-                              ? "Positive"
-                              : "Weak"
-                            : "Calculating"
-                        }
-                        tone={
-                          risk
-                            ? sharpeTone(
-                                risk.sharpe_ratio
-                              )
-                            : "neutral"
-                        }
-                      />
+                          <MetricCard
+                            label="Sharpe ratio"
+                            value={
+                              risk
+                                ? formatNumber(
+                                    risk.sharpe_ratio,
+                                    3
+                                  )
+                                : "Calculating"
+                            }
+                            caption={
+                              risk
+                                ? risk.sharpe_ratio > 1
+                                  ? "Strong"
+                                  : risk.sharpe_ratio > 0
+                                  ? "Positive"
+                                  : "Weak"
+                                : "Calculating…"
+                            }
+                            tone={
+                              risk
+                                ? sharpeTone(
+                                    risk.sharpe_ratio
+                                  )
+                                : "neutral"
+                            }
+                          />
 
-                      <MetricCard
-                        label="Value at Risk"
-                        value={
-                          risk
-                            ? `${formatNumber(
-                                risk.var_95,
-                                3
-                              )}%`
-                            : "Calculating"
-                        }
-                        caption="95% confidence"
-                        tone={
-                          risk
-                            ? "negative"
-                            : "neutral"
-                        }
-                      />
+                          <MetricCard
+                            label="Value at Risk"
+                            value={
+                              risk
+                                ? `${formatNumber(
+                                    risk.var_95,
+                                    3
+                                  )}%`
+                                : "Calculating"
+                            }
+                            caption="95% confidence"
+                            tone={
+                              risk
+                                ? "negative"
+                                : "neutral"
+                            }
+                          />
+                        </>
+                      )}
 
-                      <MetricCard
-                        label="Expected price"
-                        value={
-                          mc
-                            ? formatCurrency(
-                                mc.expected_price,
-                                info?.currency || "USD"
-                              )
-                            : "Calculating"
-                        }
-                        caption="1 year simulation"
-                        tone={
-                          mc
-                            ? "positive"
-                            : "neutral"
-                        }
-                      />
+                      {mcError ? (
+                        <EndpointErrorCard
+                          label="Expected price"
+                          message={mcError}
+                          onRetry={() => fetchMc(ticker)}
+                          inline
+                        />
+                      ) : (
+                        <MetricCard
+                          label="Expected price"
+                          value={
+                            mc
+                              ? formatCurrency(
+                                  mc.expected_price,
+                                  info?.currency || "USD"
+                                )
+                              : "Calculating"
+                          }
+                          caption="1 year simulation"
+                          tone={
+                            mc
+                              ? "positive"
+                              : "neutral"
+                          }
+                        />
+                      )}
                     </div>
                   </section>
                 )}
@@ -813,6 +1102,7 @@ export default function App() {
 
                 {(history.length > 0 ||
                   historyLoading ||
+                  historyError ||
                   summaryLoading ||
                   summary) && (
                   <section className="two-column-section">
@@ -825,7 +1115,15 @@ export default function App() {
                       />
 
                       <div className="chart-container">
-                        {history.length > 0 ? (
+                        {historyError ? (
+                          <EndpointErrorCard
+                            label="Price history"
+                            message={historyError}
+                            onRetry={() =>
+                              fetchHistory(ticker)
+                            }
+                          />
+                        ) : history.length > 0 ? (
                           <ResponsiveContainer
                             width="100%"
                             height={330}
@@ -975,7 +1273,7 @@ export default function App() {
 
                 {/* MONTE CARLO */}
 
-                {mc && (
+                {mcError ? null : mc && (
                   <section className="content-section">
                     <SectionHeading
                       eyebrow="MONTE CARLO SIMULATION"
@@ -1309,13 +1607,21 @@ export default function App() {
             </section>
 
             {error && (
-              <ErrorBanner message={error} />
+              <ErrorBanner
+                message={error}
+                onRetry={
+                  !portfolio
+                    ? analyzePortfolio
+                    : undefined
+                }
+                retryDisabled={portfolioLoading}
+              />
             )}
 
             {portfolioLoading && (
               <LoadingState
                 title="Analyzing portfolio"
-                description="Retrieving holdings and calculating portfolio risk."
+                description="Fetching holdings concurrently and calculating portfolio risk."
               />
             )}
 
@@ -1892,6 +2198,36 @@ function MetricCard({
   );
 }
 
+/**
+ * EndpointErrorCard
+ * Shown inside a section when one specific endpoint fails.
+ * Provides a targeted retry button so the user doesn't
+ * have to re-run the full analysis.
+ */
+function EndpointErrorCard({ label, message, onRetry, inline = false }) {
+  return (
+    <div
+      className={`endpoint-error-card ${inline ? "inline" : ""}`}
+      role="alert"
+    >
+      <div className="endpoint-error-body">
+        <span className="endpoint-error-label">{label}</span>
+        <p className="endpoint-error-msg">{message}</p>
+      </div>
+      {onRetry && (
+        <button
+          className="endpoint-retry-btn"
+          onClick={onRetry}
+          aria-label={`Retry ${label}`}
+        >
+          <RetryIcon />
+          Retry
+        </button>
+      )}
+    </div>
+  );
+}
+
 function Scenario({
   label,
   value,
@@ -2003,7 +2339,7 @@ function RiskReturnTooltip({
   );
 }
 
-function ErrorBanner({ message }) {
+function ErrorBanner({ message, onRetry, retryDisabled }) {
   return (
     <div className="error-banner">
       <span className="error-icon">!</span>
@@ -2015,6 +2351,18 @@ function ErrorBanner({ message }) {
 
         <p>{message}</p>
       </div>
+
+      {onRetry && (
+        <button
+          className="error-retry-btn"
+          onClick={onRetry}
+          disabled={retryDisabled}
+          aria-label="Retry"
+        >
+          <RetryIcon />
+          Retry
+        </button>
+      )}
     </div>
   );
 }
