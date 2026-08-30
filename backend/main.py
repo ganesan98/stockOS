@@ -14,11 +14,26 @@ import os
 import json
 import asyncio
 import time
+import math
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 from groq import Groq
 from itertools import combinations
 import numpy as np
+
+
+def safe_float(value, decimals=3, fallback=0.0):
+    """
+    Round a float and replace NaN / Inf with `fallback`
+    so the value is always JSON-serializable.
+    """
+    try:
+        v = float(value)
+        if not math.isfinite(v):
+            return fallback
+        return round(v, decimals)
+    except (TypeError, ValueError):
+        return fallback
 
 
 # =========================================================
@@ -799,6 +814,9 @@ def _fetch_ticker_data(ticker: str, amount: float, total_value: float):
 
     returns = get_returns(prices)
 
+    # Strip any NaN / Inf that yfinance can produce for illiquid tickers
+    returns = returns[np.isfinite(returns)]
+
     if len(returns) == 0:
         raise ValueError(
             f"Unable to calculate returns for {ticker}"
@@ -814,10 +832,10 @@ def _fetch_ticker_data(ticker: str, amount: float, total_value: float):
         "weight": amount / total_value,
         "stats": {
             "ticker": ticker,
-            "return_1y": round(float(one_year_return), 2),
-            "volatility": round(float(volatility(returns)) * 100, 3),
-            "sharpe": round(float(sharpe_ratio(returns)), 3),
-            "var_95": round(float(historical_var(returns)) * 100, 3),
+            "return_1y": safe_float(one_year_return, 2),
+            "volatility": safe_float(volatility(returns) * 100, 3),
+            "sharpe": safe_float(sharpe_ratio(returns), 3),
+            "var_95": safe_float(historical_var(returns) * 100, 3),
         },
     }
 
@@ -1154,30 +1172,18 @@ async def portfolio_risk(data: dict):
             for ticker in tickers
         },
 
-        "portfolio_volatility": round(
-            float(
-                np.std(
-                    portfolio_returns
-                )
-            ) * 100,
+        "portfolio_volatility": safe_float(
+            np.std(portfolio_returns) * 100,
             3,
         ),
 
-        "portfolio_sharpe": round(
-            float(
-                sharpe_ratio(
-                    portfolio_returns
-                )
-            ),
+        "portfolio_sharpe": safe_float(
+            sharpe_ratio(portfolio_returns),
             3,
         ),
 
-        "portfolio_var_95": round(
-            float(
-                historical_var(
-                    portfolio_returns
-                )
-            ) * 100,
+        "portfolio_var_95": safe_float(
+            historical_var(portfolio_returns) * 100,
             3,
         ),
 
