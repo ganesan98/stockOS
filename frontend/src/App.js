@@ -2594,8 +2594,6 @@ export function WhatIfDashboard({ holdings, simWeights, setSimWeights, portfolio
   };
 
   // Render Allocation Bar
-  let accumulatedPercent = 0;
-
   return (
     <div className="whatif-dashboard">
       <div className="whatif-panel panel">
