@@ -227,10 +227,6 @@ export default function App() {
   const [whatIfMode, setWhatIfMode] = useState(false);
   // simWeights: { [ticker]: newAmount (number) } — overrides from the sliders
   const [simWeights, setSimWeights] = useState({});
-  const [simResult, setSimResult] = useState(null);
-  const [simLoading, setSimLoading] = useState(false);
-  const [simError, setSimError] = useState(null);
-  const simDebounceRef = useRef(null);
 
   /* -------------------------------------------------------
      WARMUP PING
@@ -539,65 +535,11 @@ export default function App() {
      What If simulator
      ------------------------------------------------------- */
 
-  /**
-   * Schedule a debounced simulate call.
-   * Called every time the user changes a simWeight value.
-   * Only fires the API 400ms after the *last* change, so rapid
-   * slider movement doesn't flood the backend.
-   */
-  function scheduleSimulation(overrides) {
-    clearTimeout(simDebounceRef.current);
-    simDebounceRef.current = setTimeout(() => {
-      runSimulation(overrides);
-    }, 400);
-  }
-
-  async function runSimulation(overrides) {
-    if (!portfolio) return;
-
-    // Build the base holdings list from the real portfolio
-    const baseHoldings = holdings
-      .filter((h) => h.ticker.trim() && Number(h.amount) > 0)
-      .map((h) => ({
-        ticker: h.ticker.trim().toUpperCase(),
-        amount: Number(h.amount),
-      }));
-
-    if (!baseHoldings.length) return;
-
-    // Build adjustments from the current overrides map
-    const adjustments = Object.entries(overrides).map(
-      ([ticker, new_amount]) => ({ ticker, new_amount })
-    );
-
-    setSimLoading(true);
-    setSimError(null);
-
-    try {
-      const res = await axios.post(`${API}/portfolio/simulate`, {
-        holdings: baseHoldings,
-        adjustments,
-      });
-      setSimResult(res.data);
-    } catch (err) {
-      setSimError(
-        err?.response?.data?.detail ||
-          "Simulation failed. Check your adjustments and try again."
-      );
-      setSimResult(null);
-    } finally {
-      setSimLoading(false);
-    }
-  }
-
   function toggleWhatIf() {
     if (whatIfMode) {
       // Deactivate — reset everything
       setWhatIfMode(false);
       setSimWeights({});
-      setSimResult(null);
-      setSimError(null);
-      clearTimeout(simDebounceRef.current);
     } else {
       // Activate — seed simWeights with the real portfolio amounts
       const seed = {};
@@ -608,8 +550,6 @@ export default function App() {
       });
       setSimWeights(seed);
       setWhatIfMode(true);
-      // Run an initial simulation immediately with the real weights
-      runSimulation(seed);
     }
   }
 
@@ -621,16 +561,6 @@ export default function App() {
       }
     });
     setSimWeights(seed);
-    setSimResult(null);
-    setSimError(null);
-    // Re-run with real weights
-    scheduleSimulation(seed);
-  }
-
-  function updateSimWeight(ticker, value) {
-    const next = { ...simWeights, [ticker]: value };
-    setSimWeights(next);
-    scheduleSimulation(next);
   }
 
   /* -------------------------------------------------------
@@ -1735,8 +1665,6 @@ export default function App() {
                 {whatIfMode && (
                   <WhatIfBanner
                     onReset={resetSimulation}
-                    isLoading={simLoading}
-                    error={simError}
                     onDeactivate={toggleWhatIf}
                   />
                 )}
@@ -1765,134 +1693,50 @@ export default function App() {
                     </button>
                   </div>
 
-                  {/* Per-holding adjustment inputs (What If active) */}
-                  {whatIfMode && (
-                    <div className="whatif-adjustments panel">
-                      <div className="whatif-adj-header">
-                        <span className="panel-kicker">ADJUST POSITIONS</span>
-                        <span className="whatif-adj-hint">
-                          Change investment amounts — metrics update automatically
-                        </span>
-                      </div>
-                      <div className="whatif-adj-list">
-                        {holdings
-                          .filter(
-                            (h) => h.ticker.trim() && Number(h.amount) > 0
-                          )
-                          .map((h) => {
-                            const tk = h.ticker.trim().toUpperCase();
-                            return (
-                              <div
-                                className="whatif-adj-row"
-                                key={tk}
-                              >
-                                <span className="whatif-adj-ticker">
-                                  {tk}
-                                </span>
-                                <div className="whatif-adj-input-wrap">
-                                  <span className="currency-prefix">₹</span>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    step="1000"
-                                    className="whatif-adj-input"
-                                    value={
-                                      simWeights[tk] !== undefined
-                                        ? simWeights[tk]
-                                        : h.amount
-                                    }
-                                    onChange={(e) =>
-                                      updateSimWeight(
-                                        tk,
-                                        Number(e.target.value)
-                                      )
-                                    }
-                                  />
-                                </div>
-                                {/* Diff badge vs original */}
-                                {simWeights[tk] !== undefined &&
-                                  simWeights[tk] !== Number(h.amount) && (
-                                    <span
-                                      className={`whatif-diff ${
-                                        simWeights[tk] > Number(h.amount)
-                                          ? "up"
-                                          : "down"
-                                      }`}
-                                    >
-                                      {simWeights[tk] > Number(h.amount)
-                                        ? "▲"
-                                        : "▼"}{" "}
-                                      {Math.abs(
-                                        Math.round(
-                                          ((simWeights[tk] - Number(h.amount)) /
-                                            Number(h.amount)) *
-                                            100
-                                        )
-                                      )}
-                                      %
-                                    </span>
-                                  )}
-                              </div>
-                            );
-                          })}
-                      </div>
+                  {/* What If Dashboard (Active) */}
+                  {whatIfMode ? (
+                    <WhatIfDashboard
+                      holdings={holdings}
+                      simWeights={simWeights}
+                      setSimWeights={setSimWeights}
+                      portfolio={portfolio}
+                      formatCurrency={formatCurrency}
+                    />
+                  ) : (
+                    /* Metrics — normal portfolio overview */
+                    <div className="metric-grid">
+                      <MetricCard
+                        label="Total value"
+                        value={formatCurrency(portfolio.total_value, "INR")}
+                        caption="Portfolio value"
+                        tone="positive"
+                      />
+
+                      <MetricCard
+                        label="Volatility"
+                        value={`${formatNumber(
+                          portfolio.portfolio_volatility,
+                          3
+                        )}%`}
+                        caption="Daily risk"
+                        tone="warning"
+                      />
+
+                      <MetricCard
+                        label="Sharpe ratio"
+                        value={formatNumber(portfolio.portfolio_sharpe, 3)}
+                        caption="Risk-adjusted return"
+                        tone={sharpeTone(portfolio.portfolio_sharpe)}
+                      />
+
+                      <MetricCard
+                        label="Value at Risk"
+                        value={`${formatNumber(portfolio.portfolio_var_95, 3)}%`}
+                        caption="95% confidence"
+                        tone="negative"
+                      />
                     </div>
                   )}
-
-                  {/* Metrics — show simulated values (amber) when What If active */}
-                  <div className="metric-grid">
-                    {(() => {
-                      // Use simResult when What If is on and we have results,
-                      // otherwise fall back to the real portfolio data.
-                      const d =
-                        whatIfMode && simResult ? simResult : portfolio;
-                      const isSim = whatIfMode && !!simResult;
-                      return (
-                        <>
-                          <MetricCard
-                            label="Total value"
-                            value={formatCurrency(d.total_value, "INR")}
-                            caption={
-                              isSim ? "Simulated value" : "Portfolio value"
-                            }
-                            tone={isSim ? "sim" : "positive"}
-                          />
-
-                          <MetricCard
-                            label="Volatility"
-                            value={`${formatNumber(
-                              d.portfolio_volatility,
-                              3
-                            )}%`}
-                            caption={isSim ? "Simulated risk" : "Daily risk"}
-                            tone={isSim ? "sim" : "warning"}
-                          />
-
-                          <MetricCard
-                            label="Sharpe ratio"
-                            value={formatNumber(d.portfolio_sharpe, 3)}
-                            caption={
-                              isSim
-                                ? "Simulated return"
-                                : "Risk-adjusted return"
-                            }
-                            tone={
-                              isSim
-                                ? "sim"
-                                : sharpeTone(portfolio.portfolio_sharpe)
-                            }
-                          />
-
-                          <MetricCard
-                            label="Value at Risk"
-                            value={`${formatNumber(d.portfolio_var_95, 3)}%`}
-                            caption="95% confidence"
-                            tone={isSim ? "sim" : "negative"}
-                          />
-                        </>
-                      );
-                    })()}
-                  </div>
                 </section>
 
                 {/* COMPARISON TABLE */}
@@ -2382,26 +2226,16 @@ export default function App() {
    REUSABLE COMPONENTS
    ========================================================= */
 
-function WhatIfBanner({ onReset, isLoading, error, onDeactivate }) {
+function WhatIfBanner({ onReset, onDeactivate }) {
   return (
     <div className="whatif-banner" role="status" aria-live="polite">
       <div className="whatif-banner-left">
         <span className="whatif-badge">SIMULATED — not saved</span>
-        {isLoading && (
-          <span className="whatif-spinner">
-            <span className="button-spinner" />
-            Recalculating…
-          </span>
-        )}
-        {error && !isLoading && (
-          <span className="whatif-banner-error">{error}</span>
-        )}
       </div>
-      <div className="whatif-banner-actions">
+      <div className="whatif-banner-right">
         <button
           className="whatif-reset-btn"
           onClick={onReset}
-          disabled={isLoading}
           title="Snap back to real portfolio amounts"
         >
           ↺ Reset
@@ -2669,3 +2503,176 @@ function LoadingState({
     </div>
   );
 }
+// import React, { useRef, useState, useEffect } from "react";
+
+export function WhatIfDashboard({ holdings, simWeights, setSimWeights, portfolio, formatCurrency }) {
+  // 1. Gather data
+  const baseHoldings = holdings
+    .filter((h) => h.ticker.trim() && Number(h.amount) > 0)
+    .map((h) => {
+      const ticker = h.ticker.trim().toUpperCase();
+      // Find return_1y from portfolio.comparison
+      const comp = portfolio.comparison?.find(c => c.ticker === ticker);
+      const return1y = comp ? Number(comp.return_1y) : 0;
+      return {
+        ticker,
+        originalAmount: Number(h.amount),
+        amount: simWeights[ticker] !== undefined ? simWeights[ticker] : Number(h.amount),
+        return1y
+      };
+    });
+
+  const totalValue = portfolio.total_value;
+
+  // 2. Compute gains
+  let currentGain = 0;
+  let simGain = 0;
+  baseHoldings.forEach(h => {
+    currentGain += h.originalAmount * (h.return1y / 100);
+    simGain += h.amount * (h.return1y / 100);
+  });
+
+  const gainDiff = simGain - currentGain;
+
+  // 3. Slider Drag Logic
+  const trackRef = useRef(null);
+
+  const handlePointerDown = (e, dividerIndex) => {
+    e.preventDefault();
+    if (!trackRef.current) return;
+    const trackRect = trackRef.current.getBoundingClientRect();
+    
+    // We are dragging the boundary between dividerIndex and dividerIndex + 1
+    const leftItem = baseHoldings[dividerIndex];
+    const rightItem = baseHoldings[dividerIndex + 1];
+
+    const startX = e.clientX || (e.touches && e.touches[0].clientX);
+    const startAmountLeft = leftItem.amount;
+    const startAmountRight = rightItem.amount;
+
+    const onPointerMove = (moveEvent) => {
+      const currentX = moveEvent.clientX || (moveEvent.touches && moveEvent.touches[0].clientX);
+      const deltaPx = currentX - startX;
+      const deltaAmount = (deltaPx / trackRect.width) * totalValue;
+
+      let newLeft = startAmountLeft + deltaAmount;
+      let newRight = startAmountRight - deltaAmount;
+
+      if (newLeft < 0) {
+        newRight += newLeft;
+        newLeft = 0;
+      }
+      if (newRight < 0) {
+        newLeft += newRight;
+        newRight = 0;
+      }
+
+      const nextWeights = { ...simWeights };
+      // initialize all if missing
+      baseHoldings.forEach(h => {
+        if (nextWeights[h.ticker] === undefined) {
+          nextWeights[h.ticker] = h.originalAmount;
+        }
+      });
+      nextWeights[leftItem.ticker] = newLeft;
+      nextWeights[rightItem.ticker] = newRight;
+      
+      setSimWeights(nextWeights);
+    };
+
+    const onPointerUp = () => {
+      document.removeEventListener("mousemove", onPointerMove);
+      document.removeEventListener("mouseup", onPointerUp);
+      document.removeEventListener("touchmove", onPointerMove);
+      document.removeEventListener("touchend", onPointerUp);
+    };
+
+    document.addEventListener("mousemove", onPointerMove);
+    document.addEventListener("mouseup", onPointerUp);
+    document.addEventListener("touchmove", onPointerMove, { passive: false });
+    document.addEventListener("touchend", onPointerUp);
+  };
+
+  // Render Allocation Bar
+  let accumulatedPercent = 0;
+
+  return (
+    <div className="whatif-dashboard">
+      <div className="whatif-panel panel">
+        <div className="whatif-panel-header">
+          <span className="panel-kicker">ALLOCATION</span>
+          <span className="whatif-hint">Drag to move money between holdings</span>
+        </div>
+
+        <div className="allocation-track-wrapper">
+          <div className="allocation-track" ref={trackRef}>
+            {baseHoldings.map((h, i) => {
+              const pct = (h.amount / totalValue) * 100;
+              const isLast = i === baseHoldings.length - 1;
+              const el = (
+                <div key={h.ticker} className="allocation-segment" style={{ width: `${pct}%` }}>
+                  <div className="segment-content">
+                    <span className="segment-ticker">{h.ticker}</span>
+                    <span className="segment-pct">{pct.toFixed(1)}%</span>
+                    <span className="segment-amt">{formatCurrency(h.amount, "INR")}</span>
+                  </div>
+                  {!isLast && (
+                    <div 
+                      className="allocation-divider" 
+                      onMouseDown={(e) => handlePointerDown(e, i)}
+                      onTouchStart={(e) => handlePointerDown(e, i)}
+                    >
+                      <div className="divider-handle"></div>
+                    </div>
+                  )}
+                </div>
+              );
+              return el;
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="whatif-results-grid">
+        <div className="whatif-result-card panel">
+          <span className="result-kicker">CURRENT PORTFOLIO</span>
+          <div className="result-main">
+            <span className="result-label">Historical 1Y gain:</span>
+            <span className={`result-val ${currentGain >= 0 ? "positive-text" : "negative-text"}`}>
+              {currentGain >= 0 ? "+" : ""}{formatCurrency(currentGain, "INR")}
+            </span>
+          </div>
+          <div className="result-sub">
+            Ending value: {formatCurrency(totalValue + currentGain, "INR")}
+          </div>
+        </div>
+
+        <div className="whatif-result-card panel sim-card">
+          <span className="result-kicker sim-kicker">WHAT IF</span>
+          <div className="result-main">
+            <span className="result-label">Historical 1Y gain:</span>
+            <span className={`result-val ${simGain >= 0 ? "positive-text" : "negative-text"}`}>
+              {simGain >= 0 ? "+" : ""}{formatCurrency(simGain, "INR")}
+            </span>
+          </div>
+          <div className="result-sub">
+            Ending value: {formatCurrency(totalValue + simGain, "INR")}
+          </div>
+        </div>
+      </div>
+
+      <div className="whatif-delta-banner">
+        <div className="delta-content">
+          <span className="delta-label">DIFFERENCE</span>
+          <span className={`delta-val ${gainDiff >= 0 ? "positive-text" : "negative-text"}`}>
+            {gainDiff >= 0 ? "+" : ""}{formatCurrency(gainDiff, "INR")} {gainDiff >= 0 ? "more" : "less"} historical 1Y gain
+          </span>
+          <span className="delta-disclaimer">Based on historical 1Y returns. Not a prediction.</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// import React, { useRef, useState, useEffect } from "react";
+

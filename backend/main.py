@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import requests
+import yfinance as yf
 import pandas as pd
 from finance import (
     get_returns,
@@ -161,104 +161,68 @@ def fetch_history_with_retry(
     period: str = "1y",
     retries: int = 3,
     backoff: float = 1.5,
-    timeout: int = 10,
 ):
     """
-    Synchronous wrapper: fetch Twelve Data time series with automatic retries.
+    Synchronous wrapper: fetch yfinance time series with automatic retries.
     Results are cached per (ticker, period) for CACHE_TS_TTL seconds.
     Suitable for use inside a thread pool executor.
-
-    Raises HTTPException(503) after all retries are exhausted.
+    
+    Returns (yf.Ticker, pd.DataFrame).
     """
     cache_key = f"ts:{ticker}:{period}"
     cached = _cache_get(cache_key, CACHE_TS_TTL)
     if cached is not None:
-        return None, cached   # (_, DataFrame) — matches callers' unpacking
+        return yf.Ticker(ticker), cached
 
-    API_KEY = os.getenv("TWELVE_DATA_API_KEY")
-    if not API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="TWELVE_DATA_API_KEY is not configured on the server."
-        )
-
-    outputsize = 252
-    if period == "5d":
-        outputsize = 5
-    elif period == "1mo":
-        outputsize = 21
-    elif period == "3mo":
-        outputsize = 63
-    elif period == "6mo":
-        outputsize = 126
-    elif period == "1y":
-        outputsize = 252
-    elif period == "2y":
-        outputsize = 504
-    elif period == "5y":
-        outputsize = 1260
-
-    url = (
-        f"https://api.twelvedata.com/time_series"
-        f"?symbol={ticker}&interval=1day"
-        f"&outputsize={outputsize}&apikey={API_KEY}"
-    )
+    stock = yf.Ticker(ticker)
 
     last_error = None
     for attempt in range(retries):
         try:
-            r = requests.get(url, timeout=timeout)
-            r.raise_for_status()
-            data = r.json()
-            if "status" in data and data["status"] == "error":
-                err_msg = data.get("message", "Unknown API error")
-                if "not found" in err_msg.lower() or "invalid symbol" in err_msg.lower():
-                    empty_df = pd.DataFrame()
-                    _cache_set(cache_key, empty_df)
-                    return None, empty_df
-                raise ValueError(err_msg)
+            hist = stock.history(period=period)
+            
+            # yfinance returns an empty DataFrame if symbol is invalid
+            if hist.empty:
+                _cache_set(cache_key, pd.DataFrame())
+                return stock, pd.DataFrame()
 
-            values = data.get("values", [])
-            if not values:
-                empty_df = pd.DataFrame()
-                _cache_set(cache_key, empty_df)
-                return None, empty_df
+            # Ensure we have a Date index (not Datetime if yfinance returns that)
+            hist.index = hist.index.strftime('%Y-%m-%d')
+            hist.index.name = "Date"
 
-            df = pd.DataFrame(values)
-            df.rename(columns={
-                "datetime": "Date",
-                "open": "Open",
-                "high": "High",
-                "low": "Low",
-                "close": "Close",
-                "volume": "Volume"
-            }, inplace=True)
-            for col in ["Open", "High", "Low", "Close", "Volume"]:
-                df[col] = df[col].astype(float)
-
-            df = df.iloc[::-1].reset_index(drop=True)
-            df.set_index("Date", inplace=True)
-
-            _cache_set(cache_key, df)
-            return None, df
+            _cache_set(cache_key, hist)
+            return stock, hist
 
         except Exception as exc:
             last_error = exc
+            err_str = str(exc).lower()
+            
+            if "not found" in err_str or "delisted" in err_str or "no data found" in err_str:
+                _cache_set(cache_key, pd.DataFrame())
+                return stock, pd.DataFrame()
+                
             print(
-                f"[twelvedata] history attempt {attempt + 1}/{retries} "
+                f"[yfinance] history attempt {attempt + 1}/{retries} "
                 f"failed for {ticker}: {exc}"
             )
             if attempt < retries - 1:
                 time.sleep(backoff * (attempt + 1))
 
+    # After retries exhausted, differentiate based on last_error
+    err_str = str(last_error).lower() if last_error else ""
+    if "timeout" in err_str or "connection" in err_str or "readTimeout" in err_str:
+        raise HTTPException(
+            status_code=504,
+            detail=f"Network timeout while fetching data for {ticker}. Please check your connection and try again."
+        )
+    
     raise HTTPException(
         status_code=503,
         detail=(
-            f"Data provider is temporarily unavailable for {ticker}. "
+            f"Data provider (Yahoo Finance) is temporarily unavailable for {ticker}. "
             "Please try again in a moment."
         ),
     )
-
 
 def fetch_info_with_retry(
     ticker: str,
@@ -266,7 +230,7 @@ def fetch_info_with_retry(
     backoff: float = 1.5,
 ):
     """
-    Synchronous wrapper: fetch Twelve Data quote dict with retries.
+    Synchronous wrapper: fetch yfinance quote dict with retries.
     Results are cached per ticker for CACHE_QUOTE_TTL seconds.
     """
     cache_key = f"quote:{ticker}"
@@ -274,52 +238,65 @@ def fetch_info_with_retry(
     if cached is not None:
         return cached
 
-    API_KEY = os.getenv("TWELVE_DATA_API_KEY")
-    if not API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="TWELVE_DATA_API_KEY is not configured on the server."
-        )
-
-    url = f"https://api.twelvedata.com/quote?symbol={ticker}&apikey={API_KEY}"
+    stock = yf.Ticker(ticker)
     last_error = None
+    
     for attempt in range(retries):
         try:
-            r = requests.get(url, timeout=10)
-            r.raise_for_status()
-            data = r.json()
-            if "status" in data and data["status"] == "error":
-                err_msg = data.get("message", "Unknown API error")
-                if "not found" in err_msg.lower() or "invalid symbol" in err_msg.lower():
-                    result = {}
-                    _cache_set(cache_key, result)
-                    return result
-                raise ValueError(err_msg)
+            # fast_info is significantly faster than .info
+            fast_info = stock.fast_info
+            
+            # fast_info raises KeyError or returns nothing if symbol invalid
+            if not getattr(fast_info, "last_price", None):
+                result = {}
+                _cache_set(cache_key, result)
+                return result
+
+            # .info is slower but gets longName; we can fallback to ticker if it fails
+            try:
+                info = stock.info
+                name = info.get("longName", info.get("shortName", ticker))
+            except Exception:
+                name = ticker
+                
+            currency = getattr(fast_info, "currency", "USD")
 
             result = {
-                "longName": data.get("name", ticker),
-                "currentPrice": (
-                    float(data.get("close", 0))
-                    or float(data.get("previous_close", 0))
-                ),
-                "currency": data.get("currency", "USD"),
+                "longName": name,
+                "currentPrice": fast_info.last_price,
+                "currency": currency,
             }
             _cache_set(cache_key, result)
             return result
 
         except Exception as exc:
             last_error = exc
+            err_str = str(exc).lower()
+            
+            if "not found" in err_str or "delisted" in err_str:
+                result = {}
+                _cache_set(cache_key, result)
+                return result
+                
             print(
-                f"[twelvedata] info attempt {attempt + 1}/{retries} "
+                f"[yfinance] info attempt {attempt + 1}/{retries} "
                 f"failed for {ticker}: {exc}"
             )
             if attempt < retries - 1:
                 time.sleep(backoff * (attempt + 1))
 
+    err_str = str(last_error).lower() if last_error else ""
+    if "timeout" in err_str or "connection" in err_str:
+        raise HTTPException(
+            status_code=504,
+            detail=f"Network timeout while fetching info for {ticker}."
+        )
+
     raise HTTPException(
         status_code=503,
         detail="Data provider is temporarily unavailable. Please try again.",
     )
+
 
 
 # =========================================================
@@ -941,7 +918,7 @@ def _fetch_ticker_data(ticker: str, amount: float, total_value: float):
     Returns a dict on success or raises an exception on failure.
     Runs inside a ThreadPoolExecutor. Relies on the cache so
     repeated calls for the same ticker (e.g. from /simulate)
-    never trigger a fresh Twelve Data request.
+    never trigger a fresh yfinance request.
     """
     _stock, hist = fetch_history_with_retry(ticker, retries=3, backoff=1.0)
 
@@ -1277,7 +1254,7 @@ async def portfolio_simulate(data: dict):
     additions).
 
     This endpoint NEVER writes anything. It reuses the same cached
-    Twelve Data responses already in memory from the previous
+    yfinance responses already in memory from the previous
     /portfolio/risk call, so repeated simulation calls while the user
     drags a slider do NOT trigger fresh API requests.
     """

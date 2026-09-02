@@ -2932,3 +2932,207 @@ input:focus-visible {
 .metric-caption.sim {
   color: rgba(231, 200, 90, 0.7);
 }
+/* ── What If Dashboard ── */
+.whatif-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.whatif-panel {
+  padding: 24px;
+}
+
+.whatif-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.whatif-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.allocation-track-wrapper {
+  padding: 10px 0;
+}
+
+.allocation-track {
+  display: flex;
+  height: 64px;
+  border-radius: var(--radius-lg);
+  overflow: visible;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  position: relative;
+}
+
+.allocation-segment {
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid var(--line);
+  transition: background 0.2s;
+  min-width: 40px;
+}
+
+.allocation-segment:last-child {
+  border-right: none;
+}
+
+/* Alternate colors for segments */
+.allocation-segment:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.03);
+}
+.allocation-segment:nth-child(even) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.segment-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+  overflow: hidden;
+  padding: 0 4px;
+}
+
+.segment-ticker {
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.segment-pct {
+  font-size: 0.7rem;
+  color: var(--text-soft);
+  font-weight: 600;
+}
+
+.segment-amt {
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.allocation-divider {
+  position: absolute;
+  right: -10px;
+  top: -10px;
+  bottom: -10px;
+  width: 20px;
+  cursor: ew-resize;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.divider-handle {
+  width: 4px;
+  height: 100%;
+  background: var(--line-strong);
+  border-radius: 4px;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.allocation-divider:hover .divider-handle,
+.allocation-divider:active .divider-handle {
+  background: var(--yellow);
+  transform: scaleX(1.5);
+}
+
+.whatif-results-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.whatif-result-card {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.result-kicker {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.sim-kicker {
+  color: var(--yellow);
+}
+
+.result-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.result-label {
+  font-size: 0.8rem;
+  color: var(--text-soft);
+}
+
+.result-val {
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.result-sub {
+  font-size: 0.75rem;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+.sim-card {
+  border-color: rgba(231, 200, 90, 0.3);
+  background: rgba(231, 200, 90, 0.03);
+}
+
+.whatif-delta-banner {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delta-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.delta-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.delta-val {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.delta-disclaimer {
+  font-size: 0.65rem;
+  color: var(--muted-dark);
+  margin-top: 2px;
+}
+
+/* ── What If Dashboard ── */
