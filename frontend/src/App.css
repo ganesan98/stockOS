@@ -2686,3 +2686,249 @@ input:focus-visible {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+/* =========================================================
+   WHAT IF SIMULATOR
+   ========================================================= */
+
+/* Row that holds SectionHeading + What If toggle side by side */
+.section-heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+/* Flip the section-heading margin when it sits inside the row */
+.section-heading-row .section-heading {
+  margin-bottom: 0;
+}
+
+/* ── Toggle button ── */
+.whatif-toggle {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 4px;
+
+  padding: 7px 14px;
+
+  background: rgba(231, 200, 90, 0.08);
+  border: 1px solid rgba(231, 200, 90, 0.25);
+  border-radius: 7px;
+
+  color: var(--yellow);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.whatif-toggle:hover {
+  background: rgba(231, 200, 90, 0.14);
+  border-color: rgba(231, 200, 90, 0.45);
+}
+
+.whatif-toggle.active {
+  background: rgba(231, 200, 90, 0.14);
+  border-color: var(--yellow);
+  box-shadow: 0 0 0 2px rgba(231, 200, 90, 0.15);
+}
+
+/* ── Banner strip ── */
+.whatif-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  padding: 12px 18px;
+  margin-bottom: 16px;
+
+  background: rgba(231, 200, 90, 0.07);
+  border: 1px solid rgba(231, 200, 90, 0.28);
+  border-radius: var(--radius);
+
+  backdrop-filter: blur(4px);
+}
+
+.whatif-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.whatif-badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 4px;
+  background: rgba(231, 200, 90, 0.18);
+  border: 1px solid rgba(231, 200, 90, 0.4);
+  color: var(--yellow);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.whatif-spinner {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.whatif-banner-error {
+  font-size: 0.74rem;
+  color: var(--red);
+}
+
+.whatif-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.whatif-reset-btn,
+.whatif-exit-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.whatif-reset-btn {
+  background: rgba(231, 200, 90, 0.1);
+  border: 1px solid rgba(231, 200, 90, 0.3);
+  color: var(--yellow);
+}
+
+.whatif-reset-btn:hover:not(:disabled) {
+  background: rgba(231, 200, 90, 0.18);
+  border-color: rgba(231, 200, 90, 0.5);
+}
+
+.whatif-reset-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.whatif-exit-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+}
+
+.whatif-exit-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-soft);
+}
+
+/* ── Adjustment inputs panel ── */
+.whatif-adjustments {
+  margin-bottom: 20px;
+  padding: 18px 20px;
+}
+
+.whatif-adj-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.whatif-adj-hint {
+  font-size: 0.73rem;
+  color: var(--muted);
+}
+
+.whatif-adj-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.whatif-adj-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  padding: 10px 14px;
+
+  background: var(--input);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.whatif-adj-ticker {
+  width: 80px;
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-soft);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+}
+
+.whatif-adj-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.whatif-adj-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 0.83rem;
+  padding: 2px 0;
+}
+
+.whatif-adj-input::-webkit-outer-spin-button,
+.whatif-adj-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+/* Diff badge (▲ / ▼ %) */
+.whatif-diff {
+  flex-shrink: 0;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.whatif-diff.up {
+  color: var(--green);
+  background: rgba(43, 233, 140, 0.1);
+}
+
+.whatif-diff.down {
+  color: var(--red);
+  background: rgba(255, 102, 102, 0.1);
+}
+
+/* ── Simulated (amber) tone for MetricCard ── */
+.metric-number.sim {
+  color: var(--yellow);
+}
+
+.metric-dot.sim {
+  background: var(--yellow);
+}
+
+.metric-caption.sim {
+  color: rgba(231, 200, 90, 0.7);
+}

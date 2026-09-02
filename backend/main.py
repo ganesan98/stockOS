@@ -16,6 +16,7 @@ import asyncio
 import time
 import math
 from concurrent.futures import ThreadPoolExecutor
+import threading
 from dotenv import load_dotenv
 from groq import Groq
 from itertools import combinations
@@ -49,9 +50,48 @@ client = Groq(
     api_key=GROQ_API_KEY
 )
 
-# Thread pool for running blocking yfinance calls concurrently
+# Thread pool for running blocking data-fetch calls concurrently
 # inside async endpoints.
 _executor = ThreadPoolExecutor(max_workers=10)
+
+
+# =========================================================
+# IN-MEMORY CACHE
+# =========================================================
+# Simple dict-based cache with per-entry TTL.
+# No external dependency — appropriate for a single-worker
+# Render deployment. All accesses are protected by a lock
+# so concurrent requests don't race on the same key.
+#
+# TTLs are configurable via env vars (easy to tune without
+# re-deploying):
+#   CACHE_QUOTE_TTL_SECONDS   — quote data   (default 3 min)
+#   CACHE_TS_TTL_SECONDS      — time series  (default 20 min)
+
+CACHE_QUOTE_TTL = int(os.getenv("CACHE_QUOTE_TTL_SECONDS", "180"))   # 3 min
+CACHE_TS_TTL    = int(os.getenv("CACHE_TS_TTL_SECONDS",    "1200"))  # 20 min
+
+_cache: dict = {}          # key -> (stored_at_epoch, value)
+_cache_lock = threading.Lock()
+
+
+def _cache_get(key: str, ttl: int):
+    """Return cached value if it exists and hasn't expired, else None."""
+    with _cache_lock:
+        entry = _cache.get(key)
+    if entry is not None:
+        stored_at, value = entry
+        if (time.time() - stored_at) < ttl:
+            print(f"[cache] HIT  {key}")
+            return value
+    print(f"[cache] MISS {key}")
+    return None
+
+
+def _cache_set(key: str, value) -> None:
+    """Store value in the cache with the current timestamp."""
+    with _cache_lock:
+        _cache[key] = (time.time(), value)
 
 app = FastAPI(
     title="StockOS API",
@@ -125,10 +165,16 @@ def fetch_history_with_retry(
 ):
     """
     Synchronous wrapper: fetch Twelve Data time series with automatic retries.
+    Results are cached per (ticker, period) for CACHE_TS_TTL seconds.
     Suitable for use inside a thread pool executor.
 
     Raises HTTPException(503) after all retries are exhausted.
     """
+    cache_key = f"ts:{ticker}:{period}"
+    cached = _cache_get(cache_key, CACHE_TS_TTL)
+    if cached is not None:
+        return None, cached   # (_, DataFrame) — matches callers' unpacking
+
     API_KEY = os.getenv("TWELVE_DATA_API_KEY")
     if not API_KEY:
         raise HTTPException(
@@ -152,7 +198,11 @@ def fetch_history_with_retry(
     elif period == "5y":
         outputsize = 1260
 
-    url = f"https://api.twelvedata.com/time_series?symbol={ticker}&interval=1day&outputsize={outputsize}&apikey={API_KEY}"
+    url = (
+        f"https://api.twelvedata.com/time_series"
+        f"?symbol={ticker}&interval=1day"
+        f"&outputsize={outputsize}&apikey={API_KEY}"
+    )
 
     last_error = None
     for attempt in range(retries):
@@ -161,15 +211,18 @@ def fetch_history_with_retry(
             r.raise_for_status()
             data = r.json()
             if "status" in data and data["status"] == "error":
-                # E.g. rate limit or invalid symbol
                 err_msg = data.get("message", "Unknown API error")
                 if "not found" in err_msg.lower() or "invalid symbol" in err_msg.lower():
-                    return None, pd.DataFrame()
+                    empty_df = pd.DataFrame()
+                    _cache_set(cache_key, empty_df)
+                    return None, empty_df
                 raise ValueError(err_msg)
 
             values = data.get("values", [])
             if not values:
-                return None, pd.DataFrame()
+                empty_df = pd.DataFrame()
+                _cache_set(cache_key, empty_df)
+                return None, empty_df
 
             df = pd.DataFrame(values)
             df.rename(columns={
@@ -182,14 +235,19 @@ def fetch_history_with_retry(
             }, inplace=True)
             for col in ["Open", "High", "Low", "Close", "Volume"]:
                 df[col] = df[col].astype(float)
-            
+
             df = df.iloc[::-1].reset_index(drop=True)
             df.set_index("Date", inplace=True)
+
+            _cache_set(cache_key, df)
             return None, df
 
         except Exception as exc:
             last_error = exc
-            print(f"[twelvedata] history attempt {attempt + 1}/{retries} failed for {ticker}: {exc}")
+            print(
+                f"[twelvedata] history attempt {attempt + 1}/{retries} "
+                f"failed for {ticker}: {exc}"
+            )
             if attempt < retries - 1:
                 time.sleep(backoff * (attempt + 1))
 
@@ -209,7 +267,13 @@ def fetch_info_with_retry(
 ):
     """
     Synchronous wrapper: fetch Twelve Data quote dict with retries.
+    Results are cached per ticker for CACHE_QUOTE_TTL seconds.
     """
+    cache_key = f"quote:{ticker}"
+    cached = _cache_get(cache_key, CACHE_QUOTE_TTL)
+    if cached is not None:
+        return cached
+
     API_KEY = os.getenv("TWELVE_DATA_API_KEY")
     if not API_KEY:
         raise HTTPException(
@@ -227,18 +291,28 @@ def fetch_info_with_retry(
             if "status" in data and data["status"] == "error":
                 err_msg = data.get("message", "Unknown API error")
                 if "not found" in err_msg.lower() or "invalid symbol" in err_msg.lower():
-                    return {}
+                    result = {}
+                    _cache_set(cache_key, result)
+                    return result
                 raise ValueError(err_msg)
 
-            return {
+            result = {
                 "longName": data.get("name", ticker),
-                "currentPrice": float(data.get("close", 0)) or float(data.get("previous_close", 0)),
+                "currentPrice": (
+                    float(data.get("close", 0))
+                    or float(data.get("previous_close", 0))
+                ),
                 "currency": data.get("currency", "USD"),
             }
+            _cache_set(cache_key, result)
+            return result
 
         except Exception as exc:
             last_error = exc
-            print(f"[twelvedata] info attempt {attempt + 1}/{retries} failed for {ticker}: {exc}")
+            print(
+                f"[twelvedata] info attempt {attempt + 1}/{retries} "
+                f"failed for {ticker}: {exc}"
+            )
             if attempt < retries - 1:
                 time.sleep(backoff * (attempt + 1))
 
@@ -862,10 +936,12 @@ IMPORTANT ACCURACY RULES:
 
 def _fetch_ticker_data(ticker: str, amount: float, total_value: float):
     """
-    Blocking worker that fetches 1 year of yfinance history and
-    computes individual risk metrics for a single ticker.
+    Blocking worker that fetches 1 year of history and computes
+    individual risk metrics for a single ticker.
     Returns a dict on success or raises an exception on failure.
-    Runs inside a ThreadPoolExecutor.
+    Runs inside a ThreadPoolExecutor. Relies on the cache so
+    repeated calls for the same ticker (e.g. from /simulate)
+    never trigger a fresh Twelve Data request.
     """
     _stock, hist = fetch_history_with_retry(ticker, retries=3, backoff=1.0)
 
@@ -885,7 +961,7 @@ def _fetch_ticker_data(ticker: str, amount: float, total_value: float):
 
     returns = get_returns(clean_prices)
 
-    # Strip any NaN / Inf that yfinance can produce for illiquid tickers
+    # Strip any NaN / Inf from illiquid tickers
     returns = returns[np.isfinite(returns)]
 
     if len(returns) == 0:
@@ -911,13 +987,165 @@ def _fetch_ticker_data(ticker: str, amount: float, total_value: float):
     }
 
 
+def _compute_portfolio_metrics(
+    successes: list,
+    holdings: list,
+    failures: list,
+    simulated: bool = False,
+) -> dict:
+    """
+    Pure aggregation: given the per-ticker fetch results, compute
+    portfolio-level volatility, Sharpe, VaR, correlation matrix,
+    and holding comparison.
+
+    Shared by both /portfolio/risk and /portfolio/simulate so the
+    math is never duplicated.
+    """
+    if not successes:
+        failed_detail = "; ".join(
+            f"{f['ticker']}: {f['reason']}" for f in failures
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=f"Unable to fetch data for any holding. {failed_detail}",
+            headers={"X-Failed-Tickers": ",".join(f["ticker"] for f in failures)},
+        )
+
+    failed_tickers = [
+        {"ticker": f["ticker"], "reason": f["reason"]}
+        for f in failures
+    ]
+
+    # ---------------------------------------------------
+    # Build combined data structures from successes
+    # ---------------------------------------------------
+
+    all_returns = {}
+    weights = {}
+    stock_stats = {}
+
+    for r in successes:
+        d = r["data"]
+        ticker = d["ticker"]
+        all_returns[ticker] = d["returns"]
+        weights[ticker] = d["weight"]
+        stock_stats[ticker] = d["stats"]
+
+    # Re-normalise weights if some tickers failed and
+    # their amounts are now missing from the denominator.
+    total_value = sum(h["amount"] for h in holdings)
+    if failures:
+        successful_tickers = list(all_returns.keys())
+        successful_amounts = {
+            h["ticker"]: h["amount"]
+            for h in holdings
+            if h["ticker"] in successful_tickers
+        }
+        new_total = sum(successful_amounts.values())
+        if new_total > 0:
+            for t in successful_tickers:
+                weights[t] = successful_amounts[t] / new_total
+            total_value = new_total
+
+    # ---------------------------------------------------
+    # Portfolio returns (weighted sum)
+    # ---------------------------------------------------
+
+    tickers = list(all_returns.keys())
+
+    min_len = min(len(r) for r in all_returns.values())
+
+    if min_len <= 0:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Insufficient return history "
+                "to calculate portfolio risk."
+            ),
+        )
+
+    portfolio_returns = np.zeros(min_len)
+
+    for ticker in tickers:
+        portfolio_returns += (
+            weights[ticker]
+            * np.array(all_returns[ticker])[:min_len]
+        )
+
+    # ---------------------------------------------------
+    # Correlation matrix
+    # ---------------------------------------------------
+
+    corr_matrix = {}
+
+    for ticker_one, ticker_two in combinations(tickers, 2):
+        min_pair_len = min(
+            len(all_returns[ticker_one]),
+            len(all_returns[ticker_two]),
+        )
+
+        r1 = all_returns[ticker_one][:min_pair_len]
+        r2 = all_returns[ticker_two][:min_pair_len]
+
+        if min_pair_len < 2:
+            continue
+
+        corr = float(np.corrcoef(r1, r2)[0, 1])
+
+        if np.isnan(corr):
+            corr = 0.0
+
+        corr_matrix[f"{ticker_one}_{ticker_two}"] = round(corr, 3)
+
+    # ---------------------------------------------------
+    # Relative holding comparison
+    # ---------------------------------------------------
+
+    comparison = build_stock_comparison(stock_stats)
+
+    # ---------------------------------------------------
+    # Final response
+    # ---------------------------------------------------
+
+    response = {
+        "total_value": round(total_value, 2),
+
+        "weights": {
+            ticker: round(weights[ticker] * 100, 2)
+            for ticker in tickers
+        },
+
+        "portfolio_volatility": safe_float(
+            np.std(portfolio_returns) * 100, 3
+        ),
+
+        "portfolio_sharpe": safe_float(
+            sharpe_ratio(portfolio_returns), 3
+        ),
+
+        "portfolio_var_95": safe_float(
+            historical_var(portfolio_returns) * 100, 3
+        ),
+
+        "correlation": corr_matrix,
+
+        "comparison": comparison,
+
+        # Empty list when all tickers succeeded;
+        # populated when some failed so the UI can surface detail.
+        "failed_tickers": failed_tickers,
+    }
+
+    if simulated:
+        response["simulated"] = True
+
+    return response
+
+
 @app.post("/portfolio/risk")
 async def portfolio_risk(data: dict):
 
-    holdings = data.get(
-        "holdings",
-        [],
-    )
+    holdings = data.get("holdings", [])
 
     if not holdings:
         raise HTTPException(
@@ -925,119 +1153,74 @@ async def portfolio_risk(data: dict):
             detail="No holdings provided.",
         )
 
-    # -----------------------------------------------------
+    # --------------------------------------------------
     # Validate holdings
-    # -----------------------------------------------------
+    # --------------------------------------------------
 
     cleaned_holdings = []
 
     for holding in holdings:
 
-        ticker = str(
-            holding.get(
-                "ticker",
-                "",
-            )
-        ).strip().upper()
-
-        amount = holding.get(
-            "amount"
-        )
+        ticker = str(holding.get("ticker", "")).strip().upper()
+        amount = holding.get("amount")
 
         if not ticker:
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    "Every holding must have "
-                    "a ticker."
-                ),
+                detail="Every holding must have a ticker.",
             )
 
         try:
             amount = float(amount)
-
-        except (
-            TypeError,
-            ValueError,
-        ):
+        except (TypeError, ValueError):
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"Invalid investment amount "
-                    f"for {ticker}."
-                ),
+                detail=f"Invalid investment amount for {ticker}.",
             )
 
         if amount <= 0:
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    f"Investment amount for "
-                    f"{ticker} must be greater "
-                    "than zero."
+                    f"Investment amount for {ticker} must be greater than zero."
                 ),
             )
 
-        cleaned_holdings.append(
-            {
-                "ticker": ticker,
-                "amount": amount,
-            }
-        )
+        cleaned_holdings.append({"ticker": ticker, "amount": amount})
 
-    # -----------------------------------------------------
+    # --------------------------------------------------
     # Merge duplicate tickers
-    # -----------------------------------------------------
+    # --------------------------------------------------
 
     merged_holdings = {}
-
     for holding in cleaned_holdings:
-
-        ticker = holding[
-            "ticker"
-        ]
-
+        ticker = holding["ticker"]
         merged_holdings[ticker] = (
-            merged_holdings.get(
-                ticker,
-                0,
-            )
-            + holding["amount"]
+            merged_holdings.get(ticker, 0) + holding["amount"]
         )
 
     holdings = [
-        {
-            "ticker": ticker,
-            "amount": amount,
-        }
-        for ticker, amount
-        in merged_holdings.items()
+        {"ticker": ticker, "amount": amount}
+        for ticker, amount in merged_holdings.items()
     ]
 
-    # -----------------------------------------------------
+    # --------------------------------------------------
     # Total portfolio value
-    # -----------------------------------------------------
+    # --------------------------------------------------
 
-    total_value = sum(
-        holding["amount"]
-        for holding in holdings
-    )
+    total_value = sum(h["amount"] for h in holdings)
 
     if total_value <= 0:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Portfolio value must be "
-                "greater than zero."
-            ),
+            detail="Portfolio value must be greater than zero.",
         )
 
-    # -----------------------------------------------------
+    # --------------------------------------------------
     # Fetch all tickers CONCURRENTLY in thread pool
     # Each ticker gets a 20-second timeout.
-    # Failed tickers are collected rather than crashing
-    # the whole request.
-    # -----------------------------------------------------
+    # Failed tickers are collected rather than crashing.
+    # --------------------------------------------------
 
     loop = asyncio.get_running_loop()
     PER_TICKER_TIMEOUT = 20  # seconds
@@ -1060,209 +1243,145 @@ async def portfolio_risk(data: dict):
             return {
                 "ok": False,
                 "ticker": ticker,
-                "reason": f"{ticker} timed out — Yahoo Finance did not respond in time.",
+                "reason": f"{ticker} timed out — data provider did not respond in time.",
             }
         except HTTPException as exc:
-            return {
-                "ok": False,
-                "ticker": ticker,
-                "reason": exc.detail,
-            }
+            return {"ok": False, "ticker": ticker, "reason": exc.detail}
         except Exception as exc:
             print(f"[portfolio] Error for {ticker}: {exc}")
-            return {
-                "ok": False,
-                "ticker": ticker,
-                "reason": str(exc),
-            }
+            return {"ok": False, "ticker": ticker, "reason": str(exc)}
 
     results = await asyncio.gather(
-        *[
-            fetch_one(h["ticker"], h["amount"])
-            for h in holdings
-        ]
+        *[fetch_one(h["ticker"], h["amount"]) for h in holdings]
     )
 
-    # Separate successes from failures
     successes = [r for r in results if r["ok"]]
     failures = [r for r in results if not r["ok"]]
 
-    if not successes:
-        # Every ticker failed — surface meaningful detail
-        failed_detail = "; ".join(
-            f"{f['ticker']}: {f['reason']}" for f in failures
-        )
+    return _compute_portfolio_metrics(successes, holdings, failures)
+
+
+# =========================================================
+# PORTFOLIO SIMULATE  (What If — read-only, uses cached data)
+# =========================================================
+
+@app.post("/portfolio/simulate")
+async def portfolio_simulate(data: dict):
+    """
+    Stateless What If simulator.
+
+    Accepts the same holdings list as /portfolio/risk plus an
+    optional `adjustments` list that overrides individual amounts.
+    Any ticker not mentioned in adjustments keeps its original amount.
+    New tickers added only in adjustments are supported (hypothetical
+    additions).
+
+    This endpoint NEVER writes anything. It reuses the same cached
+    Twelve Data responses already in memory from the previous
+    /portfolio/risk call, so repeated simulation calls while the user
+    drags a slider do NOT trigger fresh API requests.
+    """
+    holdings_raw = data.get("holdings", [])
+    adjustments_raw = data.get("adjustments", [])
+
+    if not holdings_raw:
         raise HTTPException(
-            status_code=503,
-            detail=f"Unable to fetch data for any holding. {failed_detail}",
-            headers={"X-Failed-Tickers": ",".join(f["ticker"] for f in failures)},
+            status_code=400,
+            detail="No holdings provided.",
         )
 
-    # Warn about partial failures in the response body rather
-    # than raising — callers can still show what succeeded.
-    failed_tickers = [
-        {"ticker": f["ticker"], "reason": f["reason"]}
-        for f in failures
+    # Build base amounts map from original holdings
+    base_amounts: dict[str, float] = {}
+    for h in holdings_raw:
+        ticker = str(h.get("ticker", "")).strip().upper()
+        try:
+            amount = float(h.get("amount", 0))
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid amount for {ticker}.",
+            )
+        if ticker:
+            base_amounts[ticker] = base_amounts.get(ticker, 0) + amount
+
+    # Apply adjustments (override amounts)
+    for adj in adjustments_raw:
+        ticker = str(adj.get("ticker", "")).strip().upper()
+        try:
+            new_amount = float(adj.get("new_amount", 0))
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid new_amount for {ticker}.",
+            )
+        if not ticker:
+            continue
+        if new_amount <= 0:
+            # Treat a zero/negative as removing the holding
+            base_amounts.pop(ticker, None)
+        else:
+            base_amounts[ticker] = new_amount
+
+    if not base_amounts:
+        raise HTTPException(
+            status_code=400,
+            detail="Simulated portfolio has no valid holdings.",
+        )
+
+    total_value = sum(base_amounts.values())
+    if total_value <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Simulated portfolio total value must be greater than zero.",
+        )
+
+    holdings = [
+        {"ticker": ticker, "amount": amount}
+        for ticker, amount in base_amounts.items()
     ]
 
-    # -----------------------------------------------------
-    # Build combined data structures from successes
-    # -----------------------------------------------------
+    # --------------------------------------------------
+    # Fetch / reuse cached data concurrently
+    # --------------------------------------------------
 
-    all_returns = {}
-    weights = {}
-    stock_stats = {}
+    loop = asyncio.get_running_loop()
+    PER_TICKER_TIMEOUT = 20
 
-    for r in successes:
-        d = r["data"]
-        ticker = d["ticker"]
-        all_returns[ticker] = d["returns"]
-        weights[ticker] = d["weight"]
-        stock_stats[ticker] = d["stats"]
-
-    # Re-normalise weights if some tickers failed and
-    # their amounts are now missing from the denominator.
-    if failures:
-        successful_tickers = list(all_returns.keys())
-        successful_amounts = {
-            h["ticker"]: h["amount"]
-            for h in holdings
-            if h["ticker"] in successful_tickers
-        }
-        new_total = sum(successful_amounts.values())
-        if new_total > 0:
-            for t in successful_tickers:
-                weights[t] = successful_amounts[t] / new_total
-            total_value = new_total
-
-    # -----------------------------------------------------
-    # Portfolio returns
-    # -----------------------------------------------------
-
-    tickers = list(all_returns.keys())
-
-    min_len = min(
-        len(returns)
-        for returns
-        in all_returns.values()
-    )
-
-    if min_len <= 0:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "Insufficient return history "
-                "to calculate portfolio risk."
-            ),
-        )
-
-    portfolio_returns = np.zeros(min_len)
-
-    for ticker in tickers:
-        portfolio_returns += (
-            weights[ticker]
-            * np.array(
-                all_returns[ticker]
-            )[:min_len]
-        )
-
-    # -----------------------------------------------------
-    # Correlation matrix
-    # -----------------------------------------------------
-
-    corr_matrix = {}
-
-    for ticker_one, ticker_two in combinations(
-        tickers,
-        2,
-    ):
-        min_pair_len = min(
-            len(
-                all_returns[
-                    ticker_one
-                ]
-            ),
-            len(
-                all_returns[
-                    ticker_two
-                ]
-            ),
-        )
-
-        r1 = all_returns[
-            ticker_one
-        ][:min_pair_len]
-
-        r2 = all_returns[
-            ticker_two
-        ][:min_pair_len]
-
-        if min_pair_len < 2:
-            continue
-
-        corr = float(
-            np.corrcoef(
-                r1,
-                r2,
-            )[0, 1]
-        )
-
-        if np.isnan(corr):
-            corr = 0.0
-
-        corr_matrix[
-            f"{ticker_one}_{ticker_two}"
-        ] = round(
-            corr,
-            3,
-        )
-
-    # -----------------------------------------------------
-    # Relative holding comparison
-    # -----------------------------------------------------
-
-    comparison = build_stock_comparison(
-        stock_stats
-    )
-
-    # -----------------------------------------------------
-    # Final response
-    # -----------------------------------------------------
-
-    return {
-        "total_value": round(
-            total_value,
-            2,
-        ),
-
-        "weights": {
-            ticker: round(
-                weights[ticker] * 100,
-                2,
+    async def fetch_one(ticker: str, amount: float):
+        try:
+            result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor,
+                    _fetch_ticker_data,
+                    ticker,
+                    amount,
+                    total_value,
+                ),
+                timeout=PER_TICKER_TIMEOUT,
             )
-            for ticker in tickers
-        },
+            return {"ok": True, "data": result}
+        except asyncio.TimeoutError:
+            print(f"[simulate] Timeout fetching {ticker}")
+            return {
+                "ok": False,
+                "ticker": ticker,
+                "reason": f"{ticker} timed out.",
+            }
+        except HTTPException as exc:
+            return {"ok": False, "ticker": ticker, "reason": exc.detail}
+        except Exception as exc:
+            print(f"[simulate] Error for {ticker}: {exc}")
+            return {"ok": False, "ticker": ticker, "reason": str(exc)}
 
-        "portfolio_volatility": safe_float(
-            np.std(portfolio_returns) * 100,
-            3,
-        ),
+    results = await asyncio.gather(
+        *[fetch_one(h["ticker"], h["amount"]) for h in holdings]
+    )
 
-        "portfolio_sharpe": safe_float(
-            sharpe_ratio(portfolio_returns),
-            3,
-        ),
+    successes = [r for r in results if r["ok"]]
+    failures = [r for r in results if not r["ok"]]
 
-        "portfolio_var_95": safe_float(
-            historical_var(portfolio_returns) * 100,
-            3,
-        ),
+    return _compute_portfolio_metrics(
+        successes, holdings, failures, simulated=True
+    )
 
-        "correlation": corr_matrix,
 
-        "comparison": comparison,
-
-        # Empty list when all tickers succeeded;
-        # populated when some failed so the UI can surface detail.
-        "failed_tickers": failed_tickers,
-    }
