@@ -1857,35 +1857,41 @@ input:focus-visible {
     minmax(0, 1fr);
 }
 
+.portfolio-detail-section > .panel {
+  padding: 20px 22px 22px;
+}
+
 .detail-list {
   display: flex;
   flex-direction: column;
 
-  gap: 6px;
+  gap: 8px;
 
-  margin-top: 17px;
+  margin-top: 16px;
 }
 
 .detail-row {
-  min-height: 41px;
+  min-height: 46px;
 
   display: flex;
   align-items: center;
   justify-content: space-between;
 
-  gap: 15px;
+  gap: 16px;
 
-  padding: 9px 11px;
+  padding: 11px 14px;
 
-  border: 1px solid #171d21;
+  border: 1px solid rgba(255, 255, 255, 0.055);
 
-  border-radius: 7px;
+  border-radius: 9px;
 
-  background: var(--input);
+  background: rgba(255, 255, 255, 0.03);
 
   color: var(--text-soft);
 
-  font-size: 0.6rem;
+  font-size: 0.67rem;
+
+  letter-spacing: 0.01em;
 }
 
 .detail-row strong {
@@ -1897,7 +1903,9 @@ input:focus-visible {
     "Liberation Mono",
     monospace;
 
-  font-size: 0.6rem;
+  font-size: 0.7rem;
+
+  white-space: nowrap;
 }
 
 .detail-name {
@@ -1906,12 +1914,12 @@ input:focus-visible {
   display: flex;
   align-items: center;
 
-  gap: 8px;
+  gap: 9px;
 }
 
 .detail-dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
 
   flex: 0 0 auto;
 
@@ -1924,8 +1932,32 @@ input:focus-visible {
   color: var(--yellow) !important;
 }
 
+.correlation-summary {
+  margin-top: 12px;
+
+  padding: 11px 14px;
+
+  border-radius: 9px;
+
+  background: rgba(255, 255, 255, 0.025);
+
+  border: 1px solid rgba(255, 255, 255, 0.045);
+
+  color: var(--text-soft);
+
+  font-size: 0.64rem;
+
+  line-height: 1.55;
+}
+
+.correlation-summary strong {
+  color: var(--text);
+
+  font-size: 0.64rem;
+}
+
 .empty-detail {
-  padding: 20px 12px;
+  padding: 22px 14px;
 
   color: var(--muted-dark);
 

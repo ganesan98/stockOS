@@ -2070,7 +2070,7 @@ export default function App() {
                     <SectionHeading
                       eyebrow="DIVERSIFICATION"
                       title="Correlation"
-                      description="Relationship between portfolio holdings."
+                      description="How closely these two stocks move together."
                       compact
                     />
 
@@ -2079,27 +2079,62 @@ export default function App() {
                         portfolio.correlation ||
                           {}
                       ).length > 0 ? (
-                        Object.entries(
-                          portfolio.correlation
-                        ).map(
-                          ([pair, value]) => (
-                            <div
-                              className="detail-row"
-                              key={pair}
-                            >
-                              <span>
-                                {pair.replaceAll(
-                                  "_",
-                                  " ↔ "
-                                )}
-                              </span>
+                        <>
+                          {Object.entries(
+                            portfolio.correlation
+                          ).map(
+                            ([pair, value]) => {
+                              const num = parseFloat(value);
+                              let label, meaning;
+                              if (num >= 0.85) {
+                                label = "Very High";
+                                meaning =
+                                  "These stocks almost always move in the same direction — holding both offers little diversification benefit.";
+                              } else if (num >= 0.6) {
+                                label = "Moderately High";
+                                meaning =
+                                  "They often move together, so your risk is only partially spread across the two.";
+                              } else if (num >= 0.3) {
+                                label = "Moderate";
+                                meaning =
+                                  "Some shared movement, but they also diverge frequently — a decent diversification balance.";
+                              } else if (num >= 0) {
+                                label = "Low";
+                                meaning =
+                                  "They move somewhat independently, which helps reduce overall portfolio volatility.";
+                              } else if (num >= -0.3) {
+                                label = "Slightly Negative";
+                                meaning =
+                                  "They tend to move in opposite directions mildly — good for cushioning dips in either stock.";
+                              } else {
+                                label = "Strongly Negative";
+                                meaning =
+                                  "When one rises the other typically falls — these two act as natural hedges for each other.";
+                              }
+                              return (
+                                <div key={pair}>
+                                  <div className="detail-row">
+                                    <span>
+                                      {pair.replaceAll(
+                                        "_",
+                                        " ↔ "
+                                      )}
+                                    </span>
 
-                              <strong className="correlation-value">
-                                {value}
-                              </strong>
-                            </div>
-                          )
-                        )
+                                    <strong className="correlation-value">
+                                      {value}
+                                    </strong>
+                                  </div>
+
+                                  <div className="correlation-summary">
+                                    <strong>{label} correlation.</strong>{" "}
+                                    {meaning}
+                                  </div>
+                                </div>
+                              );
+                            }
+                          )}
+                        </>
                       ) : (
                         <div className="empty-detail">
                           Correlation data is
