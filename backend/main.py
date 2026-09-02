@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import yfinance as yf
-
+import requests
+import pandas as pd
 from finance import (
     get_returns,
     historical_var,
@@ -113,18 +113,8 @@ for _entry in TICKER_DIRECTORY:
 
 
 # =========================================================
-# HELPERS — RESILIENT YFINANCE FETCHING
+# HELPERS — RESILIENT DATA FETCHING
 # =========================================================
-
-def _fetch_history_sync(ticker: str, period: str = "1y", timeout: int = 10):
-    """
-    Blocking yfinance history fetch with explicit timeout.
-    Called inside a thread pool from async endpoints.
-    """
-    stock = yf.Ticker(ticker)
-    hist = stock.history(period=period, timeout=timeout)
-    return stock, hist
-
 
 def fetch_history_with_retry(
     ticker: str,
@@ -134,84 +124,128 @@ def fetch_history_with_retry(
     timeout: int = 10,
 ):
     """
-    Synchronous wrapper: fetch yfinance history with automatic retries.
+    Synchronous wrapper: fetch Twelve Data time series with automatic retries.
     Suitable for use inside a thread pool executor.
 
     Raises HTTPException(503) after all retries are exhausted.
     """
-    last_error = None
+    API_KEY = os.getenv("TWELVE_DATA_API_KEY")
+    if not API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="TWELVE_DATA_API_KEY is not configured on the server."
+        )
 
+    outputsize = 252
+    if period == "5d":
+        outputsize = 5
+    elif period == "1mo":
+        outputsize = 21
+    elif period == "3mo":
+        outputsize = 63
+    elif period == "6mo":
+        outputsize = 126
+    elif period == "1y":
+        outputsize = 252
+    elif period == "2y":
+        outputsize = 504
+    elif period == "5y":
+        outputsize = 1260
+
+    url = f"https://api.twelvedata.com/time_series?symbol={ticker}&interval=1day&outputsize={outputsize}&apikey={API_KEY}"
+
+    last_error = None
     for attempt in range(retries):
         try:
-            stock = yf.Ticker(ticker)
-            hist = stock.history(period=period, timeout=timeout)
-            return stock, hist
+            r = requests.get(url, timeout=timeout)
+            r.raise_for_status()
+            data = r.json()
+            if "status" in data and data["status"] == "error":
+                # E.g. rate limit or invalid symbol
+                err_msg = data.get("message", "Unknown API error")
+                if "not found" in err_msg.lower() or "invalid symbol" in err_msg.lower():
+                    return None, pd.DataFrame()
+                raise ValueError(err_msg)
+
+            values = data.get("values", [])
+            if not values:
+                return None, pd.DataFrame()
+
+            df = pd.DataFrame(values)
+            df.rename(columns={
+                "datetime": "Date",
+                "open": "Open",
+                "high": "High",
+                "low": "Low",
+                "close": "Close",
+                "volume": "Volume"
+            }, inplace=True)
+            for col in ["Open", "High", "Low", "Close", "Volume"]:
+                df[col] = df[col].astype(float)
+            
+            df = df.iloc[::-1].reset_index(drop=True)
+            df.set_index("Date", inplace=True)
+            return None, df
 
         except Exception as exc:
             last_error = exc
-            print(
-                f"[yfinance] history attempt {attempt + 1}/{retries} "
-                f"failed for {ticker}: {exc}"
-            )
-
+            print(f"[twelvedata] history attempt {attempt + 1}/{retries} failed for {ticker}: {exc}")
             if attempt < retries - 1:
                 time.sleep(backoff * (attempt + 1))
 
     raise HTTPException(
         status_code=503,
         detail=(
-            f"Yahoo Finance is temporarily unavailable for {ticker}. "
+            f"Data provider is temporarily unavailable for {ticker}. "
             "Please try again in a moment."
         ),
     )
 
 
 def fetch_info_with_retry(
-    stock,
     ticker: str,
     retries: int = 3,
     backoff: float = 1.5,
 ):
     """
-    Synchronous wrapper: fetch yfinance info dict with retries,
-    falling back to fast_info on repeated failure.
+    Synchronous wrapper: fetch Twelve Data quote dict with retries.
     """
-    last_error = None
+    API_KEY = os.getenv("TWELVE_DATA_API_KEY")
+    if not API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="TWELVE_DATA_API_KEY is not configured on the server."
+        )
 
+    url = f"https://api.twelvedata.com/quote?symbol={ticker}&apikey={API_KEY}"
+    last_error = None
     for attempt in range(retries):
         try:
-            return stock.info
+            r = requests.get(url, timeout=10)
+            r.raise_for_status()
+            data = r.json()
+            if "status" in data and data["status"] == "error":
+                err_msg = data.get("message", "Unknown API error")
+                if "not found" in err_msg.lower() or "invalid symbol" in err_msg.lower():
+                    return {}
+                raise ValueError(err_msg)
+
+            return {
+                "longName": data.get("name", ticker),
+                "currentPrice": float(data.get("close", 0)) or float(data.get("previous_close", 0)),
+                "currency": data.get("currency", "USD"),
+            }
 
         except Exception as exc:
             last_error = exc
-            print(
-                f"[yfinance] info attempt {attempt + 1}/{retries} "
-                f"failed for {ticker}: {exc}"
-            )
-
+            print(f"[twelvedata] info attempt {attempt + 1}/{retries} failed for {ticker}: {exc}")
             if attempt < retries - 1:
                 time.sleep(backoff * (attempt + 1))
 
-    # Final fallback: fast_info
-    try:
-        fi = stock.fast_info
-        return {
-            "longName": ticker,
-            "currentPrice": getattr(fi, "last_price", None),
-            "currency": getattr(fi, "currency", "USD"),
-        }
-    except Exception as fallback_exc:
-        print(
-            f"[yfinance] fast_info fallback failed for {ticker}: "
-            f"{fallback_exc}"
-        )
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "Yahoo Finance is temporarily unavailable. "
-                "Please try again."
-            ),
-        )
+    raise HTTPException(
+        status_code=503,
+        detail="Data provider is temporarily unavailable. Please try again.",
+    )
 
 
 # =========================================================
@@ -437,35 +471,25 @@ def search_tickers(
 def get_stock(ticker: str):
     ticker = ticker.strip().upper()
 
-    stock = yf.Ticker(ticker)
-
     name = ticker
     price = None
     currency = None
 
-    # Attempt 1: full info dict (throttled often for .NS tickers)
+    # Attempt 1: quote endpoint
     try:
-        info = fetch_info_with_retry(stock, ticker, retries=2)
-        name = info.get("longName") or ticker
-        price = info.get("currentPrice")
-        currency = info.get("currency")
+        info = fetch_info_with_retry(ticker, retries=2)
+        if info:
+            name = info.get("longName") or ticker
+            price = info.get("currentPrice")
+            currency = info.get("currency")
     except Exception as e:
         print(f"[get_stock] info failed for {ticker}: {e}")
 
-    # Attempt 2: fast_info fallback
+    # Attempt 2: derive last price from recent history
     if price is None:
         try:
-            fi = stock.fast_info
-            price = getattr(fi, "last_price", None)
-            currency = getattr(fi, "currency", None) or currency
-        except Exception as e:
-            print(f"[get_stock] fast_info failed for {ticker}: {e}")
-
-    # Attempt 3: derive last price from recent history
-    if price is None:
-        try:
-            hist = stock.history(period="5d", timeout=10)
-            if not hist.empty:
+            _, hist = fetch_history_with_retry(ticker, period="5d")
+            if hist is not None and not hist.empty:
                 price = float(hist["Close"].iloc[-1])
         except Exception as e:
             print(f"[get_stock] history fallback failed for {ticker}: {e}")
@@ -527,14 +551,14 @@ def get_history(
 
     except Exception as e:
         print(
-            "Yahoo Finance history error "
+            "Data provider history error "
             f"for {ticker}: {e}"
         )
 
         raise HTTPException(
             status_code=503,
             detail=(
-                "Yahoo Finance is temporarily "
+                "Data provider is temporarily "
                 "unavailable. Please try again."
             ),
         )
@@ -680,7 +704,7 @@ def get_summary(ticker: str):
         # ---------------------------------------------
 
         try:
-            info = fetch_info_with_retry(_stock, ticker, retries=2)
+            info = fetch_info_with_retry(ticker, retries=2)
             name = (
                 info.get("longName")
                 or ticker
